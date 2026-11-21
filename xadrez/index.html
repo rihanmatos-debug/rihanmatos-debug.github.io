@@ -421,6 +421,7 @@ button,a,input,select,textarea,.cell,.mv,.game,.chip,.km,.tab{touch-action:manip
     <div class="help" style="font-size:13px">A IA recebe a análise do Stockfish (lances, avaliações e linhas) e explica em português. Ela é opcional: o treinador automático funciona sem ela.</div>
     <div class="field"><label>Provedor</label>
       <select class="inp" id="aiProv">
+        <option value="claude-link">Claude — sua conta (abre o Claude com a pergunta pronta, sem chave)</option>
         <option value="gemini">Google Gemini (tem plano grátis)</option>
         <option value="anthropic">Anthropic Claude</option>
         <option value="openai">OpenAI</option>
@@ -428,8 +429,8 @@ button,a,input,select,textarea,.cell,.mv,.game,.chip,.km,.tab{touch-action:manip
       </select>
       <div class="help" id="aiProvHelp"></div>
     </div>
-    <div class="field"><label>Chave da API</label><input class="inp" id="aiKey" type="password" autocomplete="off" placeholder="cole sua chave aqui"><div class="help">A chave fica salva só neste navegador e é enviada apenas para o provedor escolhido.</div></div>
-    <div class="field"><label>Modelo</label>
+    <div class="field keyf"><label>Chave da API</label><input class="inp" id="aiKey" type="password" autocomplete="off" placeholder="cole sua chave aqui"><div class="help">A chave fica salva só neste navegador e é enviada apenas para o provedor escolhido.</div></div>
+    <div class="field keyf"><label>Modelo</label>
       <div style="display:flex;gap:6px"><input class="inp" id="aiModel" list="aiModels" style="flex:1"><datalist id="aiModels"></datalist><button class="btn" id="aiList" type="button">Listar modelos</button></div>
     </div>
     <div id="aiMsg"></div>
@@ -3253,12 +3254,22 @@ document.querySelectorAll('.stab').forEach(b=>b.onclick=()=>setTab(b.dataset.t))
    IA
    ===================================================================== */
 const AI_DEF = {
+  'claude-link':{model:'', help:'Usa a sua conta do Claude (Pro ou grátis), sem chave: o botão abre o Claude numa nova aba já com a pergunta e os dados do Stockfish. Você vê a resposta lá. A pergunta também é copiada — se o campo vier vazio, é só colar.'},
   gemini:{model:'gemini-flash-latest', help:'Crie uma chave grátis em <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">aistudio.google.com/apikey</a>.'},
   anthropic:{model:'claude-haiku-5-5', help:'Crie uma chave em <a href="https://console.anthropic.com" target="_blank" rel="noopener">console.anthropic.com</a> (pago por uso; a assinatura Claude Pro não inclui API).'},
   openai:{model:'chat-latest', help:'Crie uma chave em <a href="https://platform.openai.com/api-keys" target="_blank" rel="noopener">platform.openai.com</a> (pago por uso).'},
   openrouter:{model:'openrouter/auto', help:'Crie uma chave em <a href="https://openrouter.ai/keys" target="_blank" rel="noopener">openrouter.ai</a>. Modelos com “:free” no nome são gratuitos.'}
 };
-S.ai = () => { if(SAMPLE) return {provider:'claude-app'}; const c=store.get('ai:cfg'); return c && c.key ? c : null; };
+S.ai = () => { if(SAMPLE) return {provider:'claude-app'}; const c=store.get('ai:cfg'); if(c && c.key && c.provider!=='claude-link') return c; return {provider:'claude-link'}; };
+// abre o Claude (claude.ai) com a pergunta preenchida; a pergunta também vai para a área de transferência
+function openInClaude(prompt){
+  let url = 'https://claude.ai/new?q='+encodeURIComponent(prompt);
+  const long = url.length > 7000;
+  if(long) url = 'https://claude.ai/new';
+  const w = window.open(url, '_blank', 'noopener');
+  copyText(prompt);
+  return {long, opened: !!w || true, url};
+}
 function aiErr(j, r){ return (j && (j.error && (j.error.message||j.error) || j.message)) || ('HTTP '+r.status); }
 async function aiCall(system, user, cfg){
   cfg = cfg || S.ai(); if(!cfg) throw new Error('IA não configurada');
@@ -3322,6 +3333,12 @@ function needAiHtml(){ if(IN_CLAUDE) return '<div class="aibox"><div class="hd">
 async function runAi(key, title, system, user, target, onDone){
   const el = typeof target==='string'? $(target) : target;
   if(!S.ai()){ el.innerHTML = needAiHtml(); bindActs(el); return; }
+  if(S.ai().provider==='claude-link'){
+    const prompt = system+'\n\n---\n\n'+user;
+    const r = openInClaude(prompt);
+    S.aiCache[key] = {link:true, title, prompt, long:r.long};
+    rerenderAi(key, el); return;
+  }
   S.aiCache[key] = {loading:true, title};
   el.innerHTML = aiBox(title, '<span class="loader"></span> Pensando…');
   try{ const t = await aiCall(system, user); S.aiCache[key]={text:t, title}; if(onDone) onDone(t); }
@@ -3332,6 +3349,15 @@ async function runAi(key, title, system, user, target, onDone){
 }
 function rerenderAi(key, el){
   const c=S.aiCache[key]; if(!c || !el) return;
+  if(c.link){
+    el.innerHTML = aiBox(c.title, '<div>Abri o <b>Claude</b> numa nova aba com a pergunta e a análise do Stockfish'+(c.long?'. A pergunta é grande, então <b>cole</b> no campo (já está copiada).':' já preenchidas — é só enviar. Se o campo vier vazio, <b>cole</b> (a pergunta já está copiada).')+'</div>'+
+      '<div class="rowbtns" style="padding:8px 0 0"><button class="btn sm ai" type="button" data-claude="'+esc(key)+'">Abrir o Claude de novo</button><button class="btn sm" type="button" data-copyq="'+esc(key)+'">📋 Copiar pergunta</button></div>'+
+      '<div class="help">Quer a resposta aqui dentro do app? Configure uma chave em 🤖 IA (o Gemini tem plano grátis).</div>');
+    const b1=el.querySelector('[data-claude]'), b2=el.querySelector('[data-copyq]');
+    if(b1) b1.onclick=()=>openInClaude(c.prompt);
+    if(b2) b2.onclick=async()=>toast(await copyText(c.prompt)?'Pergunta copiada':'Não consegui copiar');
+    return;
+  }
   if(c.loading) el.innerHTML = aiBox(c.title, '<span class="loader"></span> Pensando…');
   else if(c.err) el.innerHTML = aiBox(c.title, '<div class="err" style="margin:0">'+esc(c.err)+'</div><div class="help">Confira a chave e o modelo em 🤖 IA.</div>', key);
   else el.innerHTML = aiBox(c.title, md(c.text), key);
@@ -3676,14 +3702,15 @@ let rt; window.addEventListener('resize', ()=>{ clearTimeout(rt); rt=setTimeout(
 /* modal IA */
 function openAiModal(){
   if(SAMPLE){ $('aiMsg').innerHTML=''; }
-  const c=store.get('ai:cfg')||{provider:'gemini'};
-  $('aiProv').value=c.provider||'gemini'; $('aiKey').value=c.key||''; $('aiModel').value=c.model||AI_DEF[$('aiProv').value].model;
-  $('aiProvHelp').innerHTML=AI_DEF[$('aiProv').value].help; $('aiMsg').innerHTML=''; $('aiClaudeNote').classList.toggle('hidden', !SAMPLE); $('aiModal').classList.remove('hidden');
+  const c=store.get('ai:cfg')||{provider:'claude-link'};
+  $('aiProv').value=c.provider||'claude-link'; $('aiKey').value=c.key||''; $('aiModel').value=c.model||AI_DEF[$('aiProv').value].model;
+  $('aiProvHelp').innerHTML=AI_DEF[$('aiProv').value].help; syncKeyFields(); $('aiMsg').innerHTML=''; $('aiClaudeNote').classList.toggle('hidden', !SAMPLE); $('aiModal').classList.remove('hidden');
 }
 const aiForm = () => ({provider:$('aiProv').value, key:$('aiKey').value.trim(), model:$('aiModel').value.trim()||AI_DEF[$('aiProv').value].model});
 $('aiBtn').onclick=openAiModal;
-$('aiProv').onchange=()=>{ $('aiModel').value=AI_DEF[$('aiProv').value].model; $('aiProvHelp').innerHTML=AI_DEF[$('aiProv').value].help; $('aiModels').innerHTML=''; };
-$('aiSave').onclick=()=>{ store.set('ai:cfg', aiForm()); $('aiModal').classList.add('hidden'); toast('IA configurada'); if(S.view==='review'){ $('coach').dataset.built='0'; render(); } };
+function syncKeyFields(){ const link=$('aiProv').value==='claude-link'; document.querySelectorAll('#aiModal .keyf').forEach(x=>x.classList.toggle('hidden', link)); $('aiTest').classList.toggle('hidden', link); }
+$('aiProv').onchange=()=>{ $('aiModel').value=AI_DEF[$('aiProv').value].model; $('aiProvHelp').innerHTML=AI_DEF[$('aiProv').value].help; $('aiModels').innerHTML=''; syncKeyFields(); };
+$('aiSave').onclick=()=>{ const f=aiForm(); if(f.provider!=='claude-link' && !f.key){ $('aiMsg').innerHTML='<div class="err">Cole a chave da API (ou escolha “Claude — sua conta”).</div>'; return; } store.set('ai:cfg', f); $('aiModal').classList.add('hidden'); toast('IA configurada'); if(S.view==='review'){ $('coach').dataset.built='0'; render(); } };
 $('aiTest').onclick=async()=>{ const c=aiForm(); if(!c.key){ $('aiMsg').innerHTML='<div class="err">Cole a chave primeiro.</div>'; return; } $('aiMsg').innerHTML='<div class="muted"><span class="loader"></span> Testando…</div>';
   try{ const t=await aiCall('Responda em português, em uma frase curta.', 'Diga "Conexão OK" e o nome do modelo que você é.', c); $('aiMsg').innerHTML='<div class="ok">✓ '+esc(t.slice(0,200))+'</div>'; }
   catch(e){ $('aiMsg').innerHTML='<div class="err">'+esc(e.message)+'</div>'; } };
