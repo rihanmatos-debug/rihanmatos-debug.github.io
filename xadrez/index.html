@@ -2,7 +2,7 @@
 <html lang="pt-BR">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
 <title>Revisor de Partidas — Stockfish + IA</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Noto+Sans+Symbols+2&display=swap" rel="stylesheet">
@@ -201,12 +201,69 @@ input,select,textarea{font-family:inherit}
 .bar i{display:block;height:100%}
 .hbar{display:grid;grid-template-columns:150px 1fr 40px;gap:8px;align-items:center;margin:7px 0;font-size:13px}
 canvas.chart{width:100%;height:200px;display:block}
-@media (max-width:1000px){.review,.train{grid-template-columns:1fr}.game{grid-template-columns:40px 1fr auto}.gmeta{display:none}.grid2{grid-template-columns:1fr}.pbar,.nav{padding-left:0}}
+@media (max-width:1000px){.review,.train{grid-template-columns:1fr}.game{grid-template-columns:40px 1fr auto}.gmeta{display:none}.grid2{grid-template-columns:1fr}}
+/* placar de precisão */
+.accchip{display:inline-flex;align-items:center;gap:3px;background:#2f4a1c;color:#c9f0a4;border-radius:6px;padding:2px 7px;font-size:12px;font-weight:800;margin-left:6px;font-variant-numeric:tabular-nums}
+.accchip.b2{background:#3a3833;color:#e8e6e3}
+.score{display:grid;grid-template-columns:1fr 1fr;gap:8px;padding:12px}
+.score .sc{background:var(--panel2);border-radius:10px;padding:9px 10px;text-align:center;min-width:0}
+.score .who{font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:flex;align-items:center;justify-content:center;gap:6px}
+.score .big{font-size:30px;font-weight:800;line-height:1.1;margin-top:2px;font-variant-numeric:tabular-nums}
+.score .lab{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.4px}
+.score .gr{margin-top:6px;font-size:13px;color:var(--muted)}
+.score .gr b{color:var(--text);font-size:16px}
+.gacc{font-size:12px;margin-top:3px;display:flex;gap:8px;flex-wrap:wrap}
+.gacc b{color:#c9f0a4}
+/* celular */
+html{-webkit-text-size-adjust:100%;touch-action:manipulation}
+html,body{overflow-x:hidden}
+button,a,input,select,textarea,.cell,.mv,.game,.chip,.km,.tab{touch-action:manipulation}
+.bnav{display:none}.mobile-only{display:none!important}.lbl-m{display:none}
+.toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#302e2b;border:1px solid #555;padding:10px 16px;border-radius:10px;z-index:200;font-weight:600;max-width:90vw;text-align:center}
+@media (max-width:700px){
+  body{padding-bottom:calc(64px + env(safe-area-inset-bottom))}
+  .top{padding:8px 10px;gap:6px;flex-wrap:nowrap}
+  .top .tabs,.top #userForm,.top .spacer{display:none!important}
+  .logo{font-size:15px;margin-right:auto;white-space:nowrap}.logo .k{font-size:22px}
+  .lbl-d{display:none}.lbl-m{display:inline}
+  .inp,select.inp,textarea{font-size:16px}
+  #depthSel{max-width:118px;padding:6px 4px}
+  .top .btn{padding:8px 10px}
+  .mobile-only{display:flex!important}
+  .wrap{padding:10px 8px}
+  .bnav{display:flex;position:fixed;left:0;right:0;bottom:0;z-index:30;background:var(--panel);border-top:1px solid var(--line);padding:5px 4px calc(5px + env(safe-area-inset-bottom))}
+  .bnav .tab{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;font-size:11px;padding:6px 2px;border-radius:10px}
+  .bnav .tab b{font-size:19px;line-height:1;font-weight:400}
+  .review,.train{gap:10px}
+  .evalbar{width:18px}.boardrow{gap:5px}
+  .pbar,.nav,.board-hint{padding-left:23px}
+  .pbar{min-height:26px}.pbar .nm{font-size:13px;gap:5px;min-width:0;overflow:hidden;white-space:nowrap}.pbar .capt{display:none}
+  .clock{min-width:54px;padding:3px 7px;font-size:13px}
+  .nav .btn{padding:11px 4px}
+  .board-hint{display:none}
+  .rowbtns .btn{flex:1 1 auto;justify-content:center;padding:10px 8px;font-size:13px}
+  .feedback{padding:11px 12px}.feedback .t{font-size:14px}.feedback .ic{width:30px;height:30px}
+  .moves{max-height:250px}
+  .stab{padding:12px 4px}
+  .list-head{gap:8px}.list-head h2{font-size:17px;width:100%}
+  .list-head #search{flex:1 1 100%;width:auto!important}
+  .list-head .btn{flex:1;justify-content:center}
+  .game{grid-template-columns:32px 1fr auto;gap:9px;padding:10px}
+  .tc b{font-size:17px}
+  .res{min-width:66px;font-size:12px;padding:5px 6px}
+  .stats{grid-template-columns:1fr 1fr}.stat .v{font-size:22px}
+  .hbar{grid-template-columns:105px 1fr 28px;font-size:12px}
+  .tbl{font-size:12px}.tbl td,.tbl th{padding:6px 4px}
+  .modal{padding:0;align-items:flex-end}.modal .box{border-radius:16px 16px 0 0;max-height:88vh}
+  .welcome{margin:14px auto}.welcome h1{font-size:23px}.welcome .inp{min-width:0;flex:1}
+  .toast{bottom:calc(78px + env(safe-area-inset-bottom))}
+  .score .big{font-size:26px}
+}
 </style>
 </head>
 <body>
 <div class="top">
-  <div class="logo" id="logo"><span class="k">&#9822;&#xFE0E;</span> Revisor de Partidas</div>
+  <div class="logo" id="logo"><span class="k">&#9822;&#xFE0E;</span><span class="lbl-d"> Revisor de Partidas</span><span class="lbl-m"> Revisor</span></div>
   <div class="tabs">
     <button class="tab" data-v="list">Partidas</button>
     <button class="tab" data-v="review" id="tabReview">Revisão</button>
@@ -224,9 +281,15 @@ canvas.chart{width:100%;height:200px;display:block}
     <option value="20">Profunda (20)</option>
     <option value="23">Máxima (23)</option>
   </select>
-  <button class="btn" id="pgnBtn" type="button">Colar PGN</button>
-  <button class="btn ai" id="aiBtn" type="button">🤖 IA</button>
+  <button class="btn" id="pgnBtn" type="button"><span class="lbl-d">Colar PGN</span><span class="lbl-m">PGN</span></button>
+  <button class="btn ai" id="aiBtn" type="button">🤖<span class="lbl-d"> IA</span></button>
 </div>
+<nav class="bnav">
+  <button class="tab" data-v="list"><b>♟&#xFE0E;</b>Partidas</button>
+  <button class="tab" data-v="review"><b>🔍</b>Revisão</button>
+  <button class="tab" data-v="train"><b>🎯</b>Treinar</button>
+  <button class="tab" data-v="stats"><b>📈</b>Desempenho</button>
+</nav>
 
 <div class="wrap">
   <!-- BOAS-VINDAS -->
@@ -249,6 +312,7 @@ canvas.chart{width:100%;height:200px;display:block}
 
   <!-- LISTA -->
   <div id="v-list" class="hidden">
+    <form id="userForm2" class="mobile-only" style="gap:6px;margin-bottom:10px"><input class="inp" id="userInput2" placeholder="Usuário do chess.com" autocomplete="off" spellcheck="false" style="flex:1;min-width:0"><button class="btn primary" type="submit">Buscar</button></form>
     <div id="listErr"></div>
     <div class="list-head">
       <h2 id="listTitle">Partidas</h2>
@@ -286,9 +350,10 @@ canvas.chart{width:100%;height:200px;display:block}
           <button class="btn" id="bLast" title="Fim (End)">⏭</button>
           <button class="btn" id="bFlip" title="Girar tabuleiro (F)">⇅</button>
         </div>
-        <div class="muted" style="font-size:12px;text-align:center;padding-left:34px">Dica: clique ou arraste as peças para explorar outras jogadas — o Stockfish avalia na hora.</div>
+        <div class="muted board-hint" style="font-size:12px;text-align:center;padding-left:34px">Dica: clique ou arraste as peças para explorar outras jogadas — o Stockfish avalia na hora.</div>
       </div>
       <div class="side">
+        <div class="card" id="scoreCard"></div>
         <div class="card hidden" id="progCard">
           <div class="progress">
             <div style="display:flex;align-items:center;gap:8px;font-weight:700"><span class="loader"></span> <span id="progTitle">Carregando Stockfish…</span></div>
@@ -2187,7 +2252,7 @@ async function copyText(t){
   catch(e){ const ta=document.createElement('textarea'); ta.value=t; document.body.appendChild(ta); ta.select(); let ok=false; try{ ok=document.execCommand('copy'); }catch(e2){} ta.remove(); return ok; }
 }
 function downloadText(name, text){ const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([text],{type:'application/x-chess-pgn'})); a.download=name; document.body.appendChild(a); a.click(); setTimeout(()=>{URL.revokeObjectURL(a.href); a.remove();},500); }
-function toast(msg){ const d=document.createElement('div'); d.textContent=msg; d.style.cssText='position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#302e2b;border:1px solid #555;padding:10px 16px;border-radius:10px;z-index:200;font-weight:600'; document.body.appendChild(d); setTimeout(()=>d.remove(),2200); }
+function toast(msg){ const d=document.createElement('div'); d.className='toast'; d.textContent=msg; document.body.appendChild(d); setTimeout(()=>d.remove(),2200); }
 
 /* =====================================================================
    AMBIENTE: dentro do Claude (página publicada) ou arquivo no navegador
@@ -2431,7 +2496,7 @@ async function ccFetch(url){
 }
 async function loadUser(user){
   user = (user||'').trim().toLowerCase(); if(!user) return;
-  S.user = user; store.set('cc:user', user); $('userInput').value = user;
+  S.user = user; store.set('cc:user', user); $('userInput').value = user; $('userInput2').value = user;
   show('list'); $('listErr').innerHTML=''; $('listTitle').textContent = 'Partidas de '+user;
   $('games').innerHTML = '<div class="empty"><span class="loader"></span> Buscando partidas…</div>';
   $('moreBtn').classList.add('hidden');
@@ -2555,7 +2620,8 @@ function renderList(){
     const pl = (p,col,me) => '<div class="pl'+(me?' me':'')+'"><span class="sq '+col+'"></span>'+esc(p.username)+' <span class="r">('+p.rating+')</span></div>';
     return '<div class="game" data-i="'+S.games.indexOf(g)+'">'+
       '<div class="tc"><b>'+(TCI[g.time_class]||'♟')+'</b>'+(TCN[g.time_class]||g.time_class)+'</div>'+
-      '<div class="players">'+pl(g.white,'w',m.meWhite)+pl(g.black,'b',!m.meWhite)+'<div class="opening">'+esc(openingName(eco,''))+'</div></div>'+
+      '<div class="players">'+pl(g.white,'w',m.meWhite)+pl(g.black,'b',!m.meWhite)+'<div class="opening">'+esc(openingName(eco,''))+'</div>'+
+        (c&&c.acc?'<div class="gacc"><span>🎯 Precisão <b>'+(m.meWhite?c.acc.w:c.acc.b).toFixed(1)+'</b></span>'+(c.gr?'<span class="muted">Rating da partida ≈ '+(m.meWhite?c.gr.w:c.gr.b)+'</span>':'')+'</div>':'')+'</div>'+
       '<div class="gmeta">'+d.toLocaleDateString('pt-BR')+' '+d.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})+'<div>'+nMoves+' lances</div>'+accTxt+mini+ccAcc+'</div>'+
       '<div class="res '+m.res+'">'+m.txt+(m.reason?'<div style="font-size:10px;font-weight:500;opacity:.8">por '+esc(m.reason)+'</div>':'')+'</div></div>';
   }).join('');
@@ -2661,6 +2727,15 @@ function computeAccuracy(G, pos, mv){
   for(const c of ['w','b']){ let sw=0,swa=0,sh=0,cnt=0; mv.forEach((m,i)=>{ if(m.side!==c) return; const a=Math.max(m.acc,.5); sw+=weights[i]; swa+=weights[i]*a; sh+=1/a; cnt++; }); res[c]=cnt?((swa/sw)+(cnt/sh))/2:0; }
   return res;
 }
+// Rating estimado da partida: perda média em centipeões (ACPL) → rating ≈ 3100·e^(−0,01·ACPL)
+function gameRating(G, pos){
+  const n=G.plies.length; if(pos.length<n+1) return null;
+  const cp = (ev, side) => { let v; if(!ev) v=0; else if(ev.term!=null) v = ev.term===50?0:(ev.term===100?1000:-1000); else if(ev.mate!=null) v = ev.mate>0?1000:-1000; else v = Math.max(-1000,Math.min(1000,ev.cp)); return side==='w'?v:-v; };
+  const sum={w:0,b:0}, cnt={w:0,b:0};
+  for(let i=0;i<n;i++){ const side=G.plies[i].color, b=pos[i], a=pos[i+1]; if(!b||!a) return null; sum[side]+=Math.max(0, cp(b.ev,side)-cp(b.pev||a.ev,side)); cnt[side]++; }
+  const r = {}; for(const c of ['w','b']){ const acpl = cnt[c]? sum[c]/cnt[c] : 0; r[c]=Math.round(Math.max(100, Math.min(3200, 3100*Math.exp(-0.01*acpl)))/10)*10; r['acpl_'+c]=acpl; }
+  return r;
+}
 function phaseAcc(mv){ const r={w:{},b:{}}; for(const m of mv){ if(!m) continue; const o=r[m.side][m.phase]||(r[m.side][m.phase]={s:0,n:0}); o.s+=m.acc; o.n++; } return r; }
 function countCls(mv){ const c={w:{},b:{}}; mv.forEach(m=>{ if(m) c[m.side][m.cls]=(c[m.side][m.cls]||0)+1; }); return c; }
 
@@ -2752,8 +2827,11 @@ const TAG_PT = {allowMate:'Permitiu mate', missMate:'Perdeu um mate', hang:'Deix
 const GLYPH = {k:'♚',q:'♛',r:'♜',b:'♝',n:'♞',p:'♟'};
 function boardSize(){
   const vw=window.innerWidth, vh=window.innerHeight;
-  const s = vw>1000 ? Math.min(vh-290, vw-560) : Math.min(vw-70, vh-210);
-  return Math.max(260, Math.min(720, Math.floor(s/8)*8));
+  let s;
+  if(vw>1000) s = Math.min(vh-290, vw-560);
+  else if(vw>700) s = Math.min(vw-70, vh-210);
+  else s = Math.min(vw-16-23, vh-190);
+  return Math.max(240, Math.min(720, Math.floor(s/8)*8));
 }
 let DRAG=null;
 function drawBoard(el, o){
@@ -2876,7 +2954,7 @@ function saveAnalysis(G, depth, pos, mv){
   const slim = pos.map(p=>Object.assign({}, p, {pv:(p.pv||[]).slice(0,8)}));
   const mvl = mv.map(m=>({cls:m.cls, loss:+m.loss.toFixed(2), acc:+m.acc.toFixed(1), side:m.side, phase:m.phase, tags:m.tags, to:m.to}));
   store.set(cacheKey(G.url, depth), {pos:slim, mvl, acc, sum:countCls(mv), pgn:G.pgn, url:G.url, white:G.white, black:G.black, end:G.end||Date.now()/1000, tc:G.timeClass, t:Date.now()});
-  store.set('idx:'+G.url, {acc, sum:countCls(mv), d:depth});
+  store.set('idx:'+G.url, {acc, gr:gameRating(G,pos), sum:countCls(mv), d:depth});
 }
 
 /* posição exibida, considerando variante e "tentar de novo" */
@@ -2909,7 +2987,7 @@ function render(){
   }
   drawBoard($('board'), {fen:vs.fen, flipped:S.flipped, last:vs.last, badge, arrows, hint,
     interactive: !(vs.mode==='retry' && S.retry.state==='solved'), onMove: onReviewMove});
-  renderPlayers(vs); renderEval(vs); renderFeedback(vs); renderVar(); renderMoves(); renderGraph();
+  renderScore(); renderPlayers(vs); renderEval(vs); renderFeedback(vs); renderVar(); renderMoves(); renderGraph();
   if(S.tab==='summary') renderSummary();
   if(S.tab==='coach') renderCoachTab();
   $('tabReview').classList.remove('hidden');
@@ -2922,10 +3000,21 @@ function capturedText(fen, color){ // peças que `color` capturou + vantagem mat
   const m=material(fen), d=color==='w'?m.w-m.b:m.b-m.w;
   return s+(d>0?'<b>+'+d+'</b>':'');
 }
+function renderScore(){
+  const G=S.game, el=$('scoreCard');
+  const complete = S.mv.length===G.plies.length && S.mv.every(Boolean);
+  const acc = complete? computeAccuracy(G,S.pos,S.mv) : null, gr = complete? gameRating(G,S.pos) : null;
+  const me = myColor();
+  const box = (c,p) => '<div class="sc"'+(me===c?' style="outline:1px solid #4d6b2f"':'')+'><div class="who"><span class="sq '+c+'"></span>'+esc(p.username)+'</div><div class="lab">Precisão</div><div class="big">'+(acc?acc[c].toFixed(1):'<span class="muted">–</span>')+'</div>'+
+    '<div class="gr">Rating da partida<br><b>'+(gr?'≈ '+gr[c]:'–')+'</b></div></div>';
+  el.innerHTML = '<div class="score">'+box('w',G.white)+box('b',G.black)+'</div>'+(complete?'':'<div class="muted" style="font-size:12px;text-align:center;margin:-4px 0 10px">calculando…</div>');
+  S._acc = acc; S._gr = gr;
+}
 function renderPlayers(vs){
   const G=S.game, turn=vs.fen.split(' ')[1];
   const clk = c => { if(!G.clocks || vs.mode!=='main') return ''; let idx=-1; for(let i=S.ply-1;i>=0;i--) if(G.plies[i].color===c){ idx=i; break; } return idx<0? (G.base? fmtSecs(G.base):'') : fmtSecs(clkToSecs(G.clocks[idx])); };
-  const bar = (p,c) => '<div class="nm"><span class="sq '+c+'"></span>'+esc(p.username)+' <span class="r">('+esc(p.rating)+')</span><span class="capt">'+capturedText(vs.fen,c)+'</span></div>'+(G.clocks&&vs.mode==='main'?'<div class="clock'+(turn===c?' active':'')+'">'+clk(c)+'</div>':'');
+  const chip = c => S._acc ? '<span class="accchip'+(myColor()===c||(!myColor()&&c==='w')?'':' b2')+'" title="Precisão">🎯 '+S._acc[c].toFixed(1)+'</span>' : '';
+  const bar = (p,c) => '<div class="nm"><span class="sq '+c+'"></span>'+esc(p.username)+' <span class="r">('+esc(p.rating)+')</span>'+chip(c)+'<span class="capt">'+capturedText(vs.fen,c)+'</span></div>'+(G.clocks&&vs.mode==='main'?'<div class="clock'+(turn===c?' active':'')+'">'+clk(c)+'</div>':'');
   const top = S.flipped ? ['w',G.white] : ['b',G.black], bot = S.flipped ? ['b',G.black] : ['w',G.white];
   $('pTop').innerHTML = bar(top[1],top[0]); $('pBot').innerHTML = bar(bot[1],bot[0]);
 }
@@ -3031,7 +3120,8 @@ function renderSummary(){
   const complete = S.mv.length===G.plies.length && S.mv.every(Boolean);
   if(!complete){ el.innerHTML='<div class="muted"><span class="loader"></span> O resumo aparece quando a análise terminar.</div>'; return; }
   const acc=computeAccuracy(G,S.pos,S.mv), cnt=countCls(S.mv), ph=phaseAcc(S.mv);
-  const box=(c,p)=>'<div class="accbox '+c+'"><div class="who">'+esc(p.username)+'</div><div class="num">'+acc[c].toFixed(1)+'</div><div class="cc">'+(G.ccAcc?'chess.com: '+(c==='w'?G.ccAcc.white:G.ccAcc.black).toFixed(1):'Precisão')+'</div></div>';
+  const gr=gameRating(G,S.pos);
+  const box=(c,p)=>'<div class="accbox '+c+'"><div class="who">'+esc(p.username)+'</div><div class="num">'+acc[c].toFixed(1)+'</div><div class="cc">'+(G.ccAcc?'chess.com: '+(c==='w'?G.ccAcc.white:G.ccAcc.black).toFixed(1):'Precisão')+'</div><div class="cc" style="margin-top:4px">Rating da partida <b style="color:#e8e6e3">≈ '+gr[c]+'</b></div></div>';
   let h='<div class="acc-row">'+box('w',G.white)+box('b',G.black)+'</div><table class="ctable">';
   for(const k of CLS_ORDER){ const a=cnt.w[k]||0, b=cnt.b[k]||0; h+='<tr class="'+(a+b?'':'zero')+'"><td class="n">'+a+'</td><td><div class="lbl" style="color:'+CLS[k].hex+'">'+icon(k)+CLS[k].pt+'</div></td><td class="n">'+b+'</td></tr>'; }
   const phv=(c,k)=>ph[c][k]? (ph[c][k].s/ph[c][k].n).toFixed(0) : '–';
@@ -3040,6 +3130,7 @@ function renderSummary(){
   h+='</table>';
   // momentos-chave
   const km = S.mv.map((m,i)=>({m,i})).filter(x=>SERIOUS.has(x.m.cls)||x.m.cls==='brilliant'||x.m.cls==='great').sort((a,b)=>(SERIOUS.has(b.m.cls)?b.m.loss:0)-(SERIOUS.has(a.m.cls)?a.m.loss:0)).slice(0,8).sort((a,b)=>a.i-b.i);
+  h += '<div class="muted" style="font-size:11px;margin-top:8px">O rating da partida é uma estimativa a partir da perda média por lance (não é o número oficial do chess.com).</div>';
   h += '<div class="sectit">Momentos-chave</div>';
   h += km.length? km.map(x=>{ const p=G.plies[x.i]; return '<div class="km" data-p="'+(x.i+1)+'">'+icon(x.m.cls)+'<b>'+(Math.floor(x.i/2)+1)+(p.color==='w'?'. ':'… ')+esc(p.san)+'</b><span class="muted">'+CLS[x.m.cls].pt+' · '+sideName(p.color)+'</span><span class="d">'+evText(S.pos[x.i].ev)+' → '+evText(S.pos[x.i+1].ev)+'</span></div>'; }).join('') : '<div class="muted">Nenhum erro grave — partida limpa!</div>';
   h += '<div class="rowbtns" style="padding:12px 0 0">'+btn('copyPgn','📋 Copiar PGN anotado')+btn('dlPgn','⬇ Baixar PGN')+btn('reanalyze','↻ Reanalisar')+'</div>';
@@ -3265,7 +3356,8 @@ function aiExplainPosition(fen){
 }
 function gameDigest(){
   const G=S.game, acc=computeAccuracy(G,S.pos,S.mv), cnt=countCls(S.mv), ph=phaseAcc(S.mv);
-  const lines=[gameContext(), 'Precisão: brancas '+acc.w.toFixed(1)+' / pretas '+acc.b.toFixed(1)+'.'];
+  const grr=gameRating(G,S.pos);
+  const lines=[gameContext(), 'Precisão: brancas '+acc.w.toFixed(1)+' / pretas '+acc.b.toFixed(1)+'.'+(grr?' Rating estimado da partida: brancas ≈'+grr.w+' / pretas ≈'+grr.b+'.':'')];
   for(const c of ['w','b']) lines.push(sideName(c)+': '+CLS_ORDER.filter(k=>cnt[c][k]).map(k=>cnt[c][k]+' '+CLS[k].pt).join(', ')+'. Precisão por fase: '+['open','mid','end'].filter(k=>ph[c][k]).map(k=>PHASE_PT[k]+' '+(ph[c][k].s/ph[c][k].n).toFixed(0)).join(', '));
   lines.push('\nMOMENTOS IMPORTANTES:');
   S.mv.forEach((m,i)=>{ if(SERIOUS.has(m.cls) || m.cls==='brilliant' || (m.cls==='inaccuracy' && m.loss>7)){ lines.push('---\n'+moveFacts(i)); } });
@@ -3424,12 +3516,12 @@ function statsData(){
     (D.ratings[g.time_class]||(D.ratings[g.time_class]=[])).push([g.end_time, m.me.rating]);
   }
   // análises
-  const A = {n:0, acc:[], cls:{}, phase:{open:{s:0,n:0},mid:{s:0,n:0},end:{s:0,n:0}}, tags:{}, moves:0};
+  const A = {n:0, gr:[], acc:[], cls:{}, phase:{open:{s:0,n:0},mid:{s:0,n:0},end:{s:0,n:0}}, tags:{}, moves:0};
   for(const c of allAnalyses()){
     const G=buildGame(null, c.pgn); if(!G || c.pos.length!==G.fens.length) continue;
     Object.assign(G,{white:c.white, black:c.black}); const me=myColor(G); if(!me) continue;
     const mv=(c.mvl && c.mvl.length===G.plies.length) ? c.mvl : classifyAll(G, c.pos); const acc=c.acc || computeAccuracy(G,c.pos,mv); if(!acc) continue;
-    A.n++; A.acc.push(acc[me]);
+    A.n++; A.acc.push(acc[me]); const grr=gameRating(G,c.pos); if(grr) A.gr.push(grr[me]);
     mv.forEach(m=>{ if(m.side!==me) return; A.moves++; A.cls[m.cls]=(A.cls[m.cls]||0)+1; const p=A.phase[m.phase]; p.s+=m.acc; p.n++; if(SERIOUS.has(m.cls)) (m.tags||[]).forEach(t=>A.tags[t]=(A.tags[t]||0)+1); });
   }
   return {D, A};
@@ -3448,6 +3540,7 @@ function renderStats(){
     '<div class="stat"><div class="l">Partidas carregadas</div><div class="v">'+D.n+'</div></div>'+
     '<div class="stat"><div class="l">Vitórias</div><div class="v" style="color:#81b64c">'+pct(D.res.win,D.n)+'%</div><div class="l">'+D.res.win+'V · '+D.res.draw+'E · '+D.res.loss+'D</div></div>'+
     '<div class="stat"><div class="l">Precisão média ('+A.n+' analisadas)</div><div class="v">'+avgAcc+'</div></div>'+
+    '<div class="stat"><div class="l">Rating médio das partidas (estimado)</div><div class="v">'+(A.gr.length? '≈ '+Math.round(A.gr.reduce((s,x)=>s+x,0)/A.gr.length/10)*10 : '–')+'</div></div>'+
     '<div class="stat"><div class="l">Capivaradas por partida</div><div class="v" style="color:#fa412d">'+per('blunder')+'</div></div>'+
     '<div class="stat"><div class="l">Erros por partida</div><div class="v" style="color:#ffa459">'+per('mistake')+'</div></div>'+
     '<div class="stat"><div class="l">Exercícios resolvidos</div><div class="v">'+Object.keys(trStats().done).length+'</div></div></div>';
@@ -3551,6 +3644,7 @@ $('backBtn').onclick=()=>show(S.user?'list':'welcome');
 $('graph').onclick=e=>{ const r=e.target.getBoundingClientRect(); go(Math.round((e.clientX-r.left)/r.width*(S.game.fens.length-1))); };
 $('depthSel').onchange=()=>{ store.set('cc:depth', $('depthSel').value); if(S.view==='review') analyzeGame(); else if(S.view==='list') renderList(); };
 $('userForm').onsubmit=e=>{ e.preventDefault(); loadUser($('userInput').value); };
+$('userForm2').onsubmit=e=>{ e.preventDefault(); document.activeElement && document.activeElement.blur(); loadUser($('userInput2').value); };
 $('welcomeForm').onsubmit=e=>{ e.preventDefault(); loadUser($('welcomeInput').value); };
 $('refreshBtn').onclick=()=>loadUser(S.user);
 $('moreBtn').onclick=()=>loadMoreMonths(1);
