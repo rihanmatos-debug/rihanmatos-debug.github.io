@@ -199,6 +199,8 @@ input,select,textarea{font-family:inherit}
 .tbl td{padding:7px 8px;border-bottom:1px solid #302d2a}
 .bar{height:8px;background:var(--panel2);border-radius:99px;overflow:hidden;display:flex}
 .bar i{display:block;height:100%}
+.train .boardcol{align-items:center}
+.opgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:10px}
 .hbar{display:grid;grid-template-columns:150px 1fr 40px;gap:8px;align-items:center;margin:7px 0;font-size:13px}
 canvas.chart{width:100%;height:200px;display:block}
 @media (max-width:1000px){.review,.train{grid-template-columns:1fr}.game{grid-template-columns:40px 1fr auto}.gmeta{display:none}.grid2{grid-template-columns:1fr}}
@@ -267,7 +269,7 @@ button,a,input,select,textarea,.cell,.mv,.game,.chip,.km,.tab{touch-action:manip
   <div class="tabs">
     <button class="tab" data-v="list">Partidas</button>
     <button class="tab" data-v="review" id="tabReview">Revisão</button>
-    <button class="tab" data-v="train">Treinar erros</button>
+    <button class="tab" data-v="train">Treinar</button>
     <button class="tab" data-v="stats">Desempenho</button>
   </div>
   <div class="spacer"></div>
@@ -304,7 +306,7 @@ button,a,input,select,textarea,.cell,.mv,.game,.chip,.km,.tab{touch-action:manip
       <div><b>Treinador</b>Explica por que o lance foi ruim: peça pendurada, mate perdido, garfo…</div>
       <div><b>Tentar de novo</b>Volte à posição do erro e ache o lance certo, com dicas.</div>
       <div><b>Explore variantes</b>Mova as peças no tabuleiro e o Stockfish avalia na hora.</div>
-      <div><b>Treinar erros</b>Seus erros viram exercícios para você praticar.</div>
+      <div><b>Treinar</b>Seus erros viram exercícios para você praticar.</div>
       <div><b>IA (opcional)</b>Explicações, relatório da partida e plano de estudo personalizado.</div>
     </div>
     <div class="legend" id="legend"></div>
@@ -387,7 +389,7 @@ button,a,input,select,textarea,.cell,.mv,.game,.chip,.km,.tab{touch-action:manip
 
   <!-- TREINO -->
   <div id="v-train" class="hidden">
-    <div class="list-head"><h2>Treinar meus erros</h2><div class="spacer"></div><span class="muted" id="trScore"></span></div>
+    <div class="list-head"><h2>Treinar</h2><div class="spacer"></div><span class="muted" id="trScore"></span></div>
     <div id="trBody"></div>
   </div>
 
@@ -2910,7 +2912,7 @@ function tryMove(el, from, to){
   const st=el._st; const c=new Chess(st.fen);
   const m = c.move({from, to, promotion:'q'});
   if(!m){ drawBoard(el, st.o); return; }
-  st.o.onMove && st.o.onMove({san:m.san, uci:from+to+(m.promotion||''), from, to, color:m.color, piece:m.promotion||m.piece, captured:m.captured||null, fen:c.fen(), parent:st.fen});
+  st.o.onMove && st.o.onMove({san:m.san, uci:from+to+(m.promotion||''), from, to, color:m.color, piece:m.promotion||m.piece, captured:m.captured||null, promo:!!m.promotion, fen:c.fen(), parent:st.fen});
 }
 
 /* =====================================================================
@@ -3435,7 +3437,7 @@ async function doAct(a, b){
     case 'openAi': openAiModal(); break;
     case 'report': aiGameReport(); break;
     case 'ask': aiAsk(); break;
-    case 'aiRedo': { const k=b.dataset.k; delete S.aiCache[k]; if(k==='report') aiGameReport(); else if(k.startsWith('m')) aiExplainMove(); else if(k==='plan') aiPlan(); else if(k.startsWith('p')) aiExplainPosition(k.slice(1)); else if(k.startsWith('ask')) aiAsk(); else if(k.startsWith('tr') && $('trAiB')) $('trAiB').click(); break; }
+    case 'aiRedo': { const k=b.dataset.k; delete S.aiCache[k]; if(k==='report') aiGameReport(); else if(k.startsWith('m')) aiExplainMove(); else if(k==='plan') aiPlan(); else if(k==='planday'){ if($('plAi')) $('plAi').click(); } else if(/^(tr|op|rep|eg)/.test(k)){ if($('trAiB')) $('trAiB').click(); } else if(k.startsWith('p')) aiExplainPosition(k.slice(1)); else if(k.startsWith('ask')) aiAsk(); break; }
     case 'copyPgn': toast(await copyText(annotatedPgn()) ? 'PGN anotado copiado!' : 'Não consegui copiar'); break;
     case 'dlPgn': if(DL){ try{ await DL.save({filename:(S.game.white.username+'_vs_'+S.game.black.username).replace(/[^\w-]+/g,'_')+'.pgn', data:annotatedPgn()}); }catch(e){ toast('Download cancelado'); } break; } downloadText((S.game.white.username+'_vs_'+S.game.black.username).replace(/[^\w-]+/g,'_')+'.pgn', annotatedPgn()); break;
     case 'reanalyze': analyzeGame(true); break;
@@ -3445,13 +3447,17 @@ async function doAct(a, b){
 }
 
 /* =====================================================================
-   TREINAR MEUS ERROS
+   TREINAR — central de treino: exercícios, aberturas, finais, plano do dia
    ===================================================================== */
 function allAnalyses(){
   const by = new Map();
   for(const k of store.keys('rev:v3:')){ const c=store.get(k); if(!c||!c.pgn||!c.pos) continue; const prev=by.get(c.url); if(!prev || (c.t||0)>(prev.t||0)) by.set(c.url, c); }
   return [...by.values()];
 }
+const PCAT = {all:'Todos', tatica:'Táticas', mate:'Mates', punish:'Puna o erro', open:'Abertura', mid:'Meio-jogo', end:'Final', redo:'Para revisar'};
+const TACT_TAGS = new Set(['hang','loseMaterial','missMaterial','missFork','allowMate','missMate']);
+function puzStore(){ return store.get('tr:p') || {}; }
+function trStats(){ const p=puzStore(); const done={}; let ok=0, fail=0; for(const [k,v] of Object.entries(p)){ if(v.s) done[k]=1; ok+=v.s||0; fail+=v.f||0; } return {ok, fail, done}; }
 function buildPuzzles(){
   const out=[];
   for(const c of allAnalyses()){
@@ -3459,73 +3465,437 @@ function buildPuzzles(){
     Object.assign(G, {url:c.url, white:c.white, black:c.black, end:c.end});
     const me = myColor(G); if(!me) continue;
     const mv = (c.mvl && c.mvl.length===G.plies.length) ? c.mvl : classifyAll(G, c.pos);
-    mv.forEach((m,i)=>{ if(m.side===me && SERIOUS.has(m.cls) && c.pos[i].best) out.push({id:c.url+'#'+i, G, i, pos:c.pos[i], cls:m.cls, played:G.plies[i].san, end:c.end||0, tags:m.tags}); });
+    const pov = w => me==='w'? w : 100-w;
+    mv.forEach((m,i)=>{
+      if(!m) return;
+      // 1) seus erros: ache o lance que você deveria ter jogado
+      if(m.side===me && SERIOUS.has(m.cls) && c.pos[i] && c.pos[i].best){
+        const p=c.pos[i];
+        out.push({id:c.url+'#'+i, type:'mine', G, i, fen:G.fens[i], side:me, best:p.best, ev:p.ev, pv:p.pv||[], cls:m.cls, played:G.plies[i].san, tags:m.tags||[], phase:m.phase||phaseOf(G.fens[i],i), end:c.end||0});
+      }
+      // 2) puna o erro: o adversário errou — encontre a punição
+      if(m.side!==me && SERIOUS.has(m.cls) && c.pos[i+1] && c.pos[i+1].best && G.plies[i+1]){
+        const p=c.pos[i+1];
+        if(pov(winOf(p.ev))>=65 && p.ev.term==null){
+          const mine = mv[i+1];
+          out.push({id:c.url+'#p'+(i+1), type:'punish', G, i:i+1, fen:G.fens[i+1], side:me, best:p.best, ev:p.ev, pv:p.pv||[], cls:m.cls, oppPlayed:G.plies[i].san, played:G.plies[i+1].san, punished: mine && GOODISH.has(mine.cls), tags:m.tags||[], phase:phaseOf(G.fens[i+1], i+1), end:c.end||0});
+        }
+      }
+    });
+  }
+  for(const P of out){
+    const cats = new Set(['all', P.phase]);
+    if(P.type==='punish') cats.add('punish');
+    if(matesFor(P.ev, P.side)) cats.add('mate');
+    if(P.tags.some(t=>TACT_TAGS.has(t)) || matesFor(P.ev, P.side)) cats.add('tatica');
+    P.cats = cats;
+    P.max = matesFor(P.ev, P.side) ? Math.min(Math.abs(P.ev.mate), 4) : cats.has('tatica') ? 2 : 1;
   }
   return out.sort((a,b)=>b.end-a.end || a.i-b.i);
 }
-function trStats(){ return store.get('tr:stats') || {ok:0, fail:0, done:{}}; }
+
+S.trMode = store.get('tr:mode') || 'puz';
+let TR_RENDER = null;  // re-render do modo atual (resize)
+function renderTrain(){ if(TR_RENDER) TR_RENDER(); }
 function openTrain(){
-  const list = buildPuzzles(), st=trStats();
-  const pending = list.filter(p=>!st.done[p.id]);
-  S.tr = {list, queue: pending.length? pending : list, idx:0, state:'ask', hint:0};
-  renderTrain();
+  const body=$('trBody');
+  const modes=[['puz','🧩 Exercícios'],['open','📖 Aberturas'],['end','♔ Finais'],['plan','🤖 Plano do dia']];
+  body.innerHTML = '<div class="chips trmodes" style="margin-bottom:12px">'+modes.map(([k,l])=>'<button class="chip'+(S.trMode===k?' on':'')+'" data-m="'+k+'">'+l+'</button>').join('')+'</div><div id="trArea"></div>';
+  body.querySelectorAll('.trmodes .chip').forEach(b=>b.onclick=()=>{ S.trMode=b.dataset.m; store.set('tr:mode', S.trMode); openTrain(); });
+  TR_RENDER=null; $('trScore').textContent='';
+  if(!S.user && S.trMode!=='open' && S.trMode!=='end'){ $('trArea').innerHTML='<div class="empty">Busque seu usuário do chess.com (ou importe suas partidas) primeiro.</div>'; return; }
+  if(S.trMode==='puz') puzHome();
+  else if(S.trMode==='open') openingsHome();
+  else if(S.trMode==='end') endHome();
+  else planHome();
 }
-function renderTrain(){
-  const T=S.tr, body=$('trBody'), st=trStats();
-  $('trScore').textContent = 'Acertos: '+st.ok+' · Erros: '+st.fail+' · Resolvidos: '+Object.keys(st.done).length+(T?' de '+T.list.length:'');
-  if(!S.user){ body.innerHTML='<div class="empty">Busque seu usuário do chess.com primeiro.</div>'; return; }
-  if(!T || !T.list.length){ body.innerHTML='<div class="empty">Ainda não há exercícios. Revise algumas partidas (ou use <b>⚙ Analisar 10 em lote</b> na lista) — seus erros e capivaradas viram exercícios aqui.</div>'; return; }
-  const P = T.queue[T.idx % T.queue.length], G=P.G, fen=G.fens[P.i], side=G.plies[P.i].color;
-  if(!body.querySelector('#trBoard')){
-    body.innerHTML = '<div class="train"><div class="boardcol"><div class="board" id="trBoard"></div></div><div class="side"><div class="card"><div class="feedback" id="trFb"></div><div class="rowbtns" id="trBtns"></div><div id="trAi"></div></div><div class="card"><div class="pad" id="trInfo"></div></div></div></div>';
+function practiceLayout(){
+  $('trArea').innerHTML = '<div class="train"><div class="boardcol"><div class="board" id="trBoard"></div><div class="nav" id="trNav" style="padding-left:0"></div></div>'+
+    '<div class="side"><div class="card"><div class="feedback" id="trFb"></div><div class="rowbtns" id="trBtns"></div><div id="trAi"></div></div><div class="card"><div class="pad" id="trInfo"></div></div></div></div>';
+}
+function fbHtml(ic, title, sub, color){ return (ic?'<div class="ic">'+icon(ic)+'</div>':'')+'<div style="min-width:0"><div class="t"'+(color?' style="color:'+color+'"':'')+'>'+title+'</div><div class="s">'+sub+'</div></div>'; }
+function stripTags(h){ return String(h).replace(/<[^>]+>/g,''); }
+
+/* ---------------- 🧩 EXERCÍCIOS ---------------- */
+function puzHome(){
+  const list = buildPuzzles();
+  S.pz = S.pz || {filter:'all', streak:0};
+  const T = S.pz; T.list = list;
+  const st = puzStore();
+  const isRedo = p => st[p.id] && (st[p.id].f||0) > (st[p.id].s||0);
+  const counts = {}; for(const k of Object.keys(PCAT)) counts[k] = k==='redo' ? list.filter(isRedo).length : list.filter(p=>p.cats.has(k)).length;
+  if(!list.length){ $('trArea').innerHTML='<div class="empty">Ainda não há exercícios. Revise algumas partidas (ou use <b>⚙ Analisar 10 em lote</b> na lista de partidas): seus erros — e os erros dos adversários que você pode punir — viram exercícios aqui.</div>'; return; }
+  if(!counts[T.filter]) T.filter='all';
+  const chips = Object.keys(PCAT).filter(k=>counts[k]).map(k=>'<button class="chip'+(T.filter===k?' on':'')+'" data-f="'+k+'">'+PCAT[k]+' <span class="muted">'+counts[k]+'</span></button>').join('');
+  // fila: nunca vistos → para revisar → os demais (mais antigos primeiro)
+  const pool = list.filter(T.filter==='redo' ? isRedo : (p=>p.cats.has(T.filter)));
+  const rank = p => { const v=st[p.id]; if(!v) return 0; if((v.f||0) > (v.s||0)) return 1; return 2; };
+  T.queue = pool.slice().sort((a,b)=>rank(a)-rank(b) || ((st[a.id]||{}).t||0)-((st[b.id]||{}).t||0));
+  T.idx = 0;
+  $('trArea').innerHTML = '<div class="chips" id="pzFilters" style="margin-bottom:12px">'+chips+'</div>'+
+    '<div class="train"><div class="boardcol"><div class="board" id="trBoard"></div></div>'+
+    '<div class="side"><div class="card"><div class="feedback" id="trFb"></div><div class="rowbtns" id="trBtns"></div><div id="trAi"></div></div><div class="card"><div class="pad" id="trInfo"></div></div></div></div>';
+  $('pzFilters').querySelectorAll('.chip').forEach(b=>b.onclick=()=>{ T.filter=b.dataset.f; puzHome(); });
+  puzLoad();
+}
+function puzCur(){ const T=S.pz; return T.queue[T.idx % T.queue.length]; }
+function puzLoad(){
+  const T=S.pz, P=puzCur();
+  Object.assign(T, {P, fen:P.fen, start:P.fen, sp:{best:P.best, ev:P.ev, pv:P.pv}, step:1, state:'ask', hint:0, showSol:false, last:null, badge:null, counted:false, san:null, msg:'', busy:false, seq:[]});
+  if(P.i>0){ const pm=P.G.plies[P.i-1]; T.last={from:pm.from, to:pm.to}; }
+  $('trAi').innerHTML='';
+  TR_RENDER = puzRender; puzRender();
+}
+function puzMark(ok){
+  const T=S.pz, P=T.P, st=puzStore(); const v=st[P.id]||{s:0,f:0};
+  if(ok) v.s=(v.s||0)+1; else v.f=(v.f||0)+1; v.t=Date.now(); st[P.id]=v; store.set('tr:p', st);
+  if(ok){ T.streak=(T.streak||0)+1; const b=store.get('tr:best')||0; if(T.streak>b) store.set('tr:best', T.streak); } else T.streak=0;
+}
+function puzRender(){
+  const T=S.pz, P=T.P; if(!P || !$('trBoard')) return;
+  const side=P.side, best=T.sp.best; const arrows=[]; let hint=null;
+  if(best && (T.state==='solved' || T.showSol)) arrows.push([best.slice(0,2),best.slice(2,4),'#81b64c',.9]);
+  else if(best && T.hint>=2) arrows.push([best.slice(0,2),best.slice(2,4),'#4a90e2',.6]);
+  if(best && T.hint>=1 && T.state!=='solved') hint=best.slice(0,2);
+  drawBoard($('trBoard'), {fen:T.fen, flipped:side==='b', last:T.last, badge:T.badge, arrows, hint, interactive: T.state==='ask'||T.state==='wrong', onMove: puzMove});
+  const st=puzStore(), tot=Object.values(st).reduce((a,v)=>a+(v.s||0)+(v.f||0),0), ok=Object.values(st).reduce((a,v)=>a+(v.s||0),0);
+  $('trScore').textContent = 'Acertos '+(tot?Math.round(ok/tot*100):0)+'% · Sequência 🔥 '+(T.streak||0)+' (recorde '+(store.get('tr:best')||0)+')';
+  const goal = matesFor(P.ev, side) ? 'Mate em '+Math.abs(P.ev.mate) : P.max>1 ? 'Ganhe material ('+P.max+' lances)' : 'Encontre o melhor lance';
+  let title, sub, ic='', color='';
+  if(T.state==='solved'){ ic='best'; title='Resolvido! '+esc(T.san||''); sub=T.msg; color='#81b64c'; }
+  else if(T.state==='checking'){ title='Verificando '+esc(T.san)+'…'; sub='<span class="loader"></span>'; }
+  else if(T.state==='reply'){ title='Boa! '+esc(T.san); sub='O adversário responde… <span class="loader"></span>'; ic='best'; }
+  else if(T.state==='wrong'){ ic='mistake'; title=esc(T.san)+' não funciona'; sub=T.msg+'<br>Tente de novo.'; color='#ffa459'; }
+  else if(T.step>1){ title=sideName(side)+' jogam — continue! ('+T.step+'/'+P.max+')'; sub='Ache o próximo lance da sequência.'; }
+  else {
+    title = sideName(side)+' jogam · '+goal;
+    sub = P.type==='punish' ? 'O adversário acabou de jogar <b>'+esc(P.oppPlayed)+'</b> ('+CLS[P.cls].pt.toLowerCase()+'). Como punir? '+(P.punished?'<span class="muted">(na partida você puniu com '+esc(P.played)+')</span>':'<span class="muted">(na partida você jogou '+esc(P.played)+')</span>')
+                            : 'Na partida você jogou <b>'+esc(P.played)+'</b> ('+CLS[P.cls].pt.toLowerCase()+'). Ache algo melhor.';
   }
-  const arrows=[]; let hint=null, badge=null;
-  const best=P.pos.best;
-  if(T.state==='solved' || T.showSol) arrows.push([best.slice(0,2),best.slice(2,4),'#81b64c',.9]);
-  else if(T.hint>=2) arrows.push([best.slice(0,2),best.slice(2,4),'#4a90e2',.6]);
-  if(T.hint>=1 && T.state!=='solved') hint=best.slice(0,2);
-  if(T.badge) badge=T.badge;
-  const prev = P.i>0? G.plies[P.i-1] : null;
-  drawBoard($('trBoard'), {fen: T.fen||fen, flipped: side==='b', last: T.last || (prev?{from:prev.from,to:prev.to}:null), badge, arrows, hint, interactive: T.state!=='solved', onMove: onTrainMove});
-  let t, s, ic='';
-  if(T.state==='solved'){ ic=icon(T.badge?T.badge.cls:'best'); t='Correto! '+esc(T.san); s=T.msg; }
-  else if(T.state==='checking'){ t='Verificando '+esc(T.san)+'…'; s='<span class="loader"></span>'; }
-  else if(T.state==='wrong'){ ic=icon('mistake'); t=esc(T.san)+' não é o melhor'; s=T.msg+'<br>Tente de novo.'; }
-  else { t=sideName(side)+' jogam — encontre o melhor lance'; s='Na partida você jogou <b>'+esc(P.played)+'</b> ('+CLS[P.cls].pt.toLowerCase()+'). Ache algo melhor.'; }
-  $('trFb').innerHTML = (ic?'<div class="ic">'+ic+'</div>':'')+'<div><div class="t">'+t+'</div><div class="s">'+s+'</div></div>';
-  $('trBtns').innerHTML = (T.state==='solved'? '<button class="btn sm primary" id="trNext">Próximo exercício ▶</button>' : '<button class="btn sm" id="trHint">💡 Dica</button><button class="btn sm" id="trSol">Mostrar solução</button><button class="btn sm" id="trSkip">Pular ▶</button>')+
-    '<button class="btn sm ai" id="trAiB">🤖 Explicar</button><button class="btn sm" id="trOpen">Ver na partida</button>';
-  const next=()=>{ T.idx++; Object.assign(T,{state:'ask',hint:0,fen:null,last:null,badge:null,showSol:false,san:null,counted:false}); $('trAi').innerHTML=''; renderTrain(); };
-  if($('trNext')) $('trNext').onclick=next;
-  if($('trSkip')) $('trSkip').onclick=next;
-  if($('trHint')) $('trHint').onclick=()=>{ T.hint=Math.min(2,T.hint+1); if(!T.counted){ T.counted=true; const s2=trStats(); s2.fail++; store.set('tr:stats',s2); } renderTrain(); };
-  if($('trSol')) $('trSol').onclick=()=>{ T.showSol=true; const mm=playLine(fen,[best],1)[0]; if(!T.counted){ T.counted=true; const s2=trStats(); s2.fail++; store.set('tr:stats',s2); } onTrainMove({san:mm.san, uci:best, from:mm.from, to:mm.to, color:mm.color, fen:mm.fenAfter}); };
-  $('trOpen').onclick=()=>{ const g=S.games.find(x=>x.url===G.url); if(openGame(g||null, g?null:G.pgn)){ S.ply=P.i+1; render(); } };
+  $('trFb').innerHTML = fbHtml(ic, title, sub, color);
+  const B=$('trBtns');
+  B.innerHTML = (T.state==='solved' ? '<button class="btn sm primary" id="pzNext">Próximo exercício ▶</button><button class="btn sm" id="pzRetry">↻ Repetir</button>'
+      : '<button class="btn sm" id="pzHint">💡 Dica</button><button class="btn sm" id="pzSol">Mostrar solução</button><button class="btn sm" id="pzSkip">Pular ▶</button>')+
+    '<button class="btn sm ai" id="trAiB">🤖 '+(T.state==='solved'?'Explicar':'Dica da IA')+'</button><button class="btn sm" id="pzOpen">Ver na partida</button>';
+  const nextP = ()=>{ T.idx++; puzLoad(); };
+  if($('pzNext')) $('pzNext').onclick=nextP;
+  if($('pzSkip')) $('pzSkip').onclick=()=>{ if(!T.counted){ T.counted=true; puzMark(false); } nextP(); };
+  if($('pzRetry')) $('pzRetry').onclick=()=>puzLoad();
+  if($('pzHint')) $('pzHint').onclick=()=>{ T.hint=Math.min(2,T.hint+1); if(!T.counted){ T.counted=true; puzMark(false); } puzRender(); };
+  if($('pzSol')) $('pzSol').onclick=()=>{ if(!T.counted){ T.counted=true; puzMark(false); } T.showSol=true; const line = T.step===1 ? lineText(P.fen, P.pv, P.max*2) : lineText(T.fen, T.sp.pv||[], 6); T.state='solved'; T.msg='Solução: <b>'+esc(line||uciToSan(T.fen,[T.sp.best],1)[0])+'</b>'; T.san=''; puzRender(); };
+  $('pzOpen').onclick=()=>{ const g=S.games.find(x=>x.url===P.G.url); if(openGame(g||null, g?null:P.G.pgn)){ S.ply=P.type==='punish'?P.i:P.i+1; render(); } };
   $('trAiB').onclick=()=>{
-    const facts = 'Exercício tirado de uma partida do aluno.\nFEN: '+fen+'\nPeças: '+pieceList(fen)+'\nVez de jogar: '+sideName(side)+'\nNa partida o aluno jogou '+P.played+' ('+CLS[P.cls].pt+'). Melhor lance do Stockfish: '+uciToSan(fen,[best],1)[0]+' ('+evText(P.pos.ev)+'), linha: '+lineText(fen,P.pos.pv,8);
-    runAi('tr'+P.id, 'Explicação do exercício', AI_SYS, facts+'\n\n'+(T.state==='solved'?'Explique por que o melhor lance funciona e qual padrão tático/estratégico o aluno deve memorizar (4-6 frases).':'Dê UMA dica que ajude o aluno a encontrar o lance SEM revelar o lance nem a casa de destino (2-3 frases).'), $('trAi'));
+    const facts = 'Exercício tirado de uma partida do aluno ('+(P.type==='punish'?'o adversário errou com '+P.oppPlayed+' e o aluno deve punir':'o aluno errou com '+P.played)+').\nFEN: '+P.fen+'\nPeças: '+pieceList(P.fen)+'\nVez de jogar: '+sideName(side)+'\nObjetivo: '+goal+'\nSolução do Stockfish: '+lineText(P.fen, P.pv, Math.max(2,P.max*2))+' (avaliação '+evText(P.ev)+')'+(P.tags.length?'\nTipo: '+P.tags.map(t=>TAG_PT[t]).filter(Boolean).join(', '):'');
+    runAi('tr'+P.id+(T.state==='solved'?'s':'h'), T.state==='solved'?'Explicação do exercício':'Dica da IA', AI_SYS, facts+'\n\n'+(T.state==='solved'?'Explique por que a solução funciona e qual padrão tático/estratégico o aluno deve memorizar (4-6 frases).':'Dê UMA dica que ajude o aluno a achar o primeiro lance SEM revelar o lance, a peça exata nem a casa de destino (2-3 frases). Fale do padrão (ex.: peça sem defesa, rei exposto, cravada).'), $('trAi'));
   };
-  const tagTxt = (P.tags||[]).filter(t=>TAG_PT[t]).map(t=>TAG_PT[t]).join(' · ');
-  $('trInfo').innerHTML = '<div class="muted" style="font-size:13px;line-height:1.6">Exercício '+((T.idx%T.queue.length)+1)+' de '+T.queue.length+'<br>'+esc(G.white.username)+' vs '+esc(G.black.username)+(G.end?' · '+new Date(G.end*1000).toLocaleDateString('pt-BR'):'')+'<br>Lance '+(Math.floor(P.i/2)+1)+(tagTxt?'<br>Tipo de erro: '+esc(tagTxt):'')+'</div>';
+  const v=st[P.id];
+  $('trInfo').innerHTML = '<div class="muted" style="font-size:13px;line-height:1.7">Exercício '+((T.idx%T.queue.length)+1)+' de '+T.queue.length+' · '+PCAT[S.pz.filter]+'<br>'+esc(P.G.white.username)+' vs '+esc(P.G.black.username)+(P.G.end?' · '+new Date(P.G.end*1000).toLocaleDateString('pt-BR'):'')+' · lance '+(Math.floor(P.i/2)+1)+
+    '<br>Categoria: '+[...P.cats].filter(c=>c!=='all').map(c=>PCAT[c]).join(' · ')+(v?'<br>Seu histórico neste exercício: '+(v.s||0)+' acerto(s), '+(v.f||0)+' erro(s)':'')+'</div>';
 }
-async function onTrainMove(m){
-  const T=S.tr, P=T.queue[T.idx%T.queue.length], fen=P.G.fens[P.i];
-  T.san=m.san; T.fen=m.fen; T.last={from:m.from,to:m.to}; T.state='checking'; T.badge=null; renderTrain();
-  const res = await evalAttempt(fen, m, P.pos);
-  if(S.tr!==T) return;
-  const st=trStats();
-  if(res.ok){
-    T.state='solved'; T.badge={sq:m.to, cls:res.cls};
-    T.msg=(m.uci===P.pos.best?'Esse é o lance do Stockfish.':'Também funciona ('+evText(res.ev)+').')+'<br>Linha: '+esc(lineText(fen, m.uci===P.pos.best?P.pos.pv:[m.uci], 8));
-    if(!T.counted){ st.ok++; T.counted=true; } st.done[P.id]=1; store.set('tr:stats', st);
-  } else {
-    T.state='wrong'; T.badge={sq:m.to, cls:res.cls}; T.msg='Avaliação: <b>'+evText(res.ev)+'</b> (o melhor dá '+evText(P.pos.ev)+').';
-    if(!T.counted){ st.fail++; T.counted=true; store.set('tr:stats', st); }
-    renderTrain();
-    setTimeout(()=>{ if(S.tr===T && T.state==='wrong'){ T.fen=null; T.last=null; T.badge=null; T.state='ask'; renderTrain(); } }, 1500);
+async function puzMove(m){
+  const T=S.pz, P=T.P; if(T.busy) return; T.busy=true;
+  const fen0=T.fen;
+  T.san=m.san; T.fen=m.fen; T.last={from:m.from,to:m.to}; T.state='checking'; T.badge=null; puzRender();
+  const res = await evalAttempt(fen0, m, T.sp);
+  if(S.pz!==T || T.P!==P){ return; }
+  if(!res.ok){
+    T.state='wrong'; T.badge={sq:m.to, cls:res.cls}; T.msg='Depois de '+esc(m.san)+' a avaliação fica <b>'+evText(res.ev)+'</b> (o melhor dá '+evText(T.sp.ev)+').';
+    if(!T.counted){ T.counted=true; puzMark(false); }
+    T.busy=false; puzRender();
+    setTimeout(()=>{ if(S.pz===T && T.P===P && T.state==='wrong'){ T.fen=fen0; T.badge=null; T.state='ask'; const pm=P.G.plies[P.i-1]; T.last = T.step===1 && pm ? {from:pm.from,to:pm.to} : T.prevLast; puzRender(); } }, 1500);
     return;
   }
-  renderTrain();
+  T.badge={sq:m.to, cls:res.cls}; T.seq.push(m.uci);
+  const term = terminalEval(m.fen);
+  if(T.step>=P.max || term){ return puzSolved(m); }
+  // resposta do adversário e próximo passo
+  T.state='reply'; puzRender();
+  const eng = await getEngine();
+  let reply = (m.uci===T.sp.best && T.sp.pv && T.sp.pv[1]) ? T.sp.pv[1] : null;
+  if(!reply){ const r=await eng.analyze(m.fen, 14, null, 'try'); reply=r.best; }
+  if(!reply){ return puzSolved(m); }
+  await new Promise(r=>setTimeout(r,450));
+  const rm = playLine(m.fen,[reply],1)[0]; if(!rm) return puzSolved(m); T.seq.push(reply);
+  T.fen = rm.fenAfter; T.last={from:rm.from,to:rm.to}; T.prevLast=T.last; T.badge=null; puzRender();
+  const r2 = await eng.analyze(T.fen, 16, null, 'try');
+  if(S.pz!==T || T.P!==P) return;
+  const pov = w => P.side==='w'? w : 100-w;
+  const sp = {best:r2.best, ev:r2.l1? r2.l1.ev : {cp:0}, pv:r2.l1? r2.l1.pv : []};
+  const stillMate = matesFor(P.ev, P.side) ? matesFor(sp.ev, P.side) : true;
+  if(!sp.best || !stillMate || (pov(winOf(sp.ev)) < 70)){ return puzSolved(m, true); }
+  T.sp = sp; T.step++; T.state='ask'; T.hint=0; T.busy=false; puzRender();
+}
+function puzSolved(m, early){
+  const T=S.pz, P=T.P;
+  T.state='solved'; T.busy=false;
+  T.msg = (T.step>1? 'Sequência completa! ' : (m.uci===T.sp.best?'Esse é o lance do Stockfish. ':'Também funciona. ')) + (P.max>1 && T.step===1 && !early ? '' : '') +
+    '<br>Linha: '+esc(T.step===1 ? lineText(P.fen, m.uci===P.best? P.pv : [m.uci], Math.max(4,P.max*2)) : lineText(P.fen, T.seq, 20));
+  if(terminalEval(m.fen) && new Chess(m.fen).in_checkmate()) T.msg = 'Xeque-mate! 🎉';
+  if(!T.counted){ T.counted=true; puzMark(true); }
+  puzRender();
+}
+
+/* ---------------- 📖 ABERTURAS ---------------- */
+const OPENINGS = [
+  {id:'italiana', name:'Italiana (Giuoco Piano)', first:'1.e4', moves:'e4 e5 Nf3 Nc6 Bc4 Bc5 c3 Nf6 d3 d6 O-O O-O', idea:'Desenvolvimento rápido com o bispo mirando f7. As brancas preparam d4 com c3; com d3 o jogo fica calmo: roque, Re1, Nbd2-f1-g3 e ataque lento no lado do rei. As pretas espelham o desenvolvimento e buscam ...a6/...Ba7 para preservar o bispo.'},
+  {id:'espanhola', name:'Espanhola (Ruy Lopez)', first:'1.e4', moves:'e4 e5 Nf3 Nc6 Bb5 a6 Ba4 Nf6 O-O Be7 Re1 b5 Bb3 d6 c3 O-O', idea:'O bispo pressiona o cavalo que defende e5. As brancas rocam, colocam Re1 e preparam c3 + d4 para dominar o centro; a manobra Nbd2-f1-g3 é típica. As pretas ganham espaço na ala da dama com ...a6/...b5 e mantêm o ponto e5.'},
+  {id:'vienense', name:'Vienense (Gambito)', first:'1.e4', moves:'e4 e5 Nc3 Nf6 f4 d5 fxe5 Nxe4 Nf3 Be7', idea:'As brancas desenvolvem o cavalo antes e jogam f4 cedo para abrir a coluna f e atacar. Contra ...d5 o peão vai a e5 ganhando espaço; as pretas centralizam o cavalo em e4 e desenvolvem rápido.'},
+  {id:'najdorf', name:'Siciliana Najdorf', first:'1.e4 c5', moves:'e4 c5 Nf3 d6 d4 cxd4 Nxd4 Nf6 Nc3 a6', idea:'As pretas trocam o peão c pelo peão d das brancas e ficam com maioria central. ...a6 controla b5 e prepara ...e5 ou ...b5. Jogo desequilibrado — ótimo para jogar para vencer de pretas.'},
+  {id:'alapin', name:'Siciliana Alapin (anti-Siciliana)', first:'1.e4 c5', moves:'e4 c5 c3 Nf6 e5 Nd5 d4 cxd4 Nf3 Nc6 cxd4 d6 Bc4', idea:'Contra a Siciliana, c3 prepara d4 para ter dois peões centrais e evita a teoria das linhas abertas. As brancas ganham espaço com e5 e desenvolvem o bispo atacando o cavalo de d5.'},
+  {id:'francesa', name:'Francesa (Clássica)', first:'1.e4 e6', moves:'e4 e6 d4 d5 Nc3 Nf6 Bg5 Be7 e5 Nfd7 Bxe7 Qxe7', idea:'As pretas aceitam menos espaço em troca de uma estrutura sólida e atacam a cadeia de peões com ...c5 e ...f6. O bispo de c8 é a peça problemática. As brancas usam o espaço para atacar no lado do rei.'},
+  {id:'carokann', name:'Caro-Kann (Clássica)', first:'1.e4 c6', moves:'e4 c6 d4 d5 Nc3 dxe4 Nxe4 Bf5 Ng3 Bg6 h4 h6 Nf3 Nd7', idea:'Como a Francesa, mas o bispo de c8 sai antes de ...e6 (Bf5). Estrutura muito sólida; h4 das brancas ganha espaço contra o bispo. As pretas trocam peças e buscam um final confortável.'},
+  {id:'escandinava', name:'Escandinava', first:'1.e4 d5', moves:'e4 d5 exd5 Qxd5 Nc3 Qa5 d4 Nf6 Nf3 c6 Bc4 Bf5', idea:'As pretas desafiam e4 já no primeiro lance. A dama sai cedo mas fica segura em a5; depois ...c6, ...Bf5 e ...e6 formam uma estrutura sólida. As brancas ganham tempos atacando a dama e desenvolvem rápido.'},
+  {id:'gdr', name:'Gambito da Dama Recusado', first:'1.d4 d5', moves:'d4 d5 c4 e6 Nc3 Nf6 Bg5 Be7 e3 O-O Nf3 Nbd7', idea:'As brancas oferecem o peão c para desviar o peão d5. As pretas mantêm o centro com ...e6 e desenvolvem com calma. Planos típicos: ataque das minorias (b4-b5) das brancas e a liberação ...c5 ou ...e5 das pretas.'},
+  {id:'eslava', name:'Defesa Eslava', first:'1.d4 d5', moves:'d4 d5 c4 c6 Nf3 Nf6 Nc3 dxc4 a4 Bf5 e3 e6 Bxc4 Bb4', idea:'As pretas defendem d5 com ...c6, mantendo o bispo de c8 livre (Bf5). Depois de ...dxc4 as brancas recuperam o peão; as pretas desenvolvem tudo com conforto.'},
+  {id:'london', name:'Sistema London', first:'1.d4', moves:'d4 d5 Bf4 Nf6 e3 e6 Nf3 c5 c3 Nc6 Nbd2 Bd6 Bg3 O-O', idea:'Um sistema: d4, Bf4, e3, Nf3, c3, Nbd2 e Bd3 contra quase tudo. Estrutura sólida em pirâmide e plano simples. Contra ...Bd6, recue o bispo para g3 para manter a diagonal.'},
+  {id:'indiarei', name:'Índia do Rei', first:'1.d4 Nf6', moves:'d4 Nf6 c4 g6 Nc3 Bg7 e4 d6 Nf3 O-O Be2 e5 O-O Nc6', idea:'As pretas deixam as brancas ocuparem o centro e contra-atacam com ...e5. Se as brancas fecham com d5, o plano típico das pretas é ...Ne8/...f5 e ataque no lado do rei; as brancas atacam na ala da dama (c5).'},
+];
+OPENINGS.forEach(o=>o.list=o.moves.split(' '));
+function opStore(){ return store.get('tr:op') || {}; }
+function myOpenings(){
+  if(!S.user) return [];
+  const map={};
+  for(const g of S.games){
+    const m=gameMeta(g); if(!myColor({white:g.white,black:g.black})) continue;
+    const c=m.meWhite?'w':'b', name=openingName(ecoOf(g.pgn),'',true)||'Desconhecida', k=name+'|'+c;
+    const o=map[k]||(map[k]={name, color:c, n:0, win:0, games:[]}); o.n++; if(m.res==='win') o.win++; o.games.push(g);
+  }
+  return Object.values(map).filter(o=>o.n>=1 && o.name!=='Desconhecida').sort((a,b)=>b.n-a.n).slice(0,10);
+}
+function openingsHome(){
+  TR_RENDER=null;
+  const ost=opStore();
+  const card = o => { const w=ost[o.id+'w'], b=ost[o.id+'b'];
+    const badge = s => s? (s.best===0?'<span class="accchip">✓ dominada</span>':'<span class="accchip b2">melhor: '+s.best+' erro(s)</span>') : '';
+    return '<div class="card"><div class="pad"><div style="font-weight:800">'+esc(o.name)+'</div><div class="muted" style="font-size:12px;margin:2px 0 6px">'+esc(o.first)+' · '+o.list.length+' lances</div>'+
+      '<div style="font-size:13px;color:#cfcbc4;line-height:1.45;max-height:60px;overflow:hidden">'+esc(o.idea)+'</div>'+
+      '<div class="rowbtns" style="padding:10px 0 0"><button class="btn sm" data-op="'+o.id+'" data-mode="learn">📖 Aprender</button><button class="btn sm primary" data-op="'+o.id+'" data-mode="w">De brancas</button><button class="btn sm primary" data-op="'+o.id+'" data-mode="b">De pretas</button></div>'+
+      '<div style="margin-top:4px">'+(w?'<span class="muted" style="font-size:12px">Brancas</span>'+badge(w)+' ':'')+(b?'<span class="muted" style="font-size:12px">Pretas</span>'+badge(b):'')+'</div></div></div>'; };
+  const mine = myOpenings();
+  let h='';
+  if(mine.length){
+    h += '<div class="card" style="margin-bottom:14px"><h3>🎯 Treine as aberturas das SUAS partidas</h3><div class="pad"><div class="muted" style="font-size:13px;margin-bottom:8px">O app joga os lances que seus adversários realmente jogaram contra você, e o Stockfish confere os seus.</div><table class="tbl"><tr><th>Abertura</th><th>Cor</th><th>Jogos</th><th>Vitórias</th><th></th></tr>'+
+      mine.map((o,i)=>'<tr><td>'+esc(o.name)+'</td><td><span class="sq '+o.color+'"></span></td><td>'+o.n+'</td><td>'+pct(o.win,o.n)+'%</td><td><button class="btn sm primary" data-rep="'+i+'">Praticar</button></td></tr>').join('')+'</table></div></div>';
+  }
+  h += '<div class="sectit" style="font-size:15px">📚 Biblioteca de aberturas</div><div class="opgrid">'+OPENINGS.map(card).join('')+'</div>';
+  $('trArea').innerHTML = h;
+  $('trArea').querySelectorAll('[data-op]').forEach(b=>b.onclick=()=>{ const o=OPENINGS.find(x=>x.id===b.dataset.op); opStart(o, b.dataset.mode); });
+  $('trArea').querySelectorAll('[data-rep]').forEach(b=>b.onclick=()=>repStart(mine[+b.dataset.rep]));
+}
+function opStart(o, mode){
+  practiceLayout();
+  const fens=['rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1'], ms=[];
+  const c=new Chess(); for(const san of o.list){ const m=c.move(san); ms.push({san:m.san, from:m.from, to:m.to, uci:m.from+m.to+(m.promotion||'')}); fens.push(c.fen()); }
+  S.op = {o, mode, side: mode==='learn'?'w':mode, fens, ms, ply:0, errors:0, tries:0, state:'ask', hint:0, kind:'line'};
+  TR_RENDER=opRender; opRender(); if(mode!=='learn') opAuto();
+}
+function opAuto(){ // o app joga o lado do adversário
+  const O=S.op; if(!O || O.mode==='learn') return;
+  if(O.ply>=O.ms.length){ return opFinish(); }
+  const turn = O.fens[O.ply].split(' ')[1];
+  if(turn!==O.side){ setTimeout(()=>{ if(S.op!==O) return; O.ply++; O.hint=0; O.tries=0; opRender(); opAuto(); }, 380); }
+}
+function opFinish(){
+  const O=S.op; O.state='done';
+  const st=opStore(), k=O.o.id+O.side, prev=st[k];
+  st[k] = {best: prev? Math.min(prev.best, O.errors) : O.errors, n:(prev?prev.n:0)+1, t:Date.now()}; store.set('tr:op', st);
+  opRender();
+}
+function opRender(){
+  const O=S.op; if(!O || !$('trBoard')) return;
+  const fen=O.fens[O.ply], last=O.ply? O.ms[O.ply-1] : null, next=O.ms[O.ply];
+  const arrows=[]; let hint=null;
+  if(O.mode!=='learn' && next && O.state!=='done'){ if(O.tries>=3 || O.show) arrows.push([next.from,next.to,'#81b64c',.85]); else if(O.hint) hint=next.from; }
+  if(O.mode==='learn' && next) arrows.push([next.from,next.to,'#4a90e2',.55]);
+  const yourTurn = O.mode!=='learn' && O.state!=='done' && fen.split(' ')[1]===O.side;
+  drawBoard($('trBoard'), {fen, flipped:O.side==='b', last: last?{from:last.from,to:last.to}:null, badge:O.badge, arrows, hint, interactive: yourTurn, onMove: opMove});
+  const moveNo = i => { const n=Math.floor(i/2)+1; return n+(i%2?'… ':'. '); };
+  const lineHtml = O.ms.filter((m,i)=>O.mode==='learn' || i<O.ply || O.state==='done').map((m,i)=>'<span style="'+(i<O.ply?'color:#e8e6e3':'color:#6b6862')+(i===O.ply-1?';font-weight:800':'')+'">'+(i%2===0||i===0?moveNo(i):'')+esc(m.san)+'</span>').join(' ');
+  let title, sub, ic='';
+  if(O.mode==='learn'){ title=esc(O.o.name); sub = O.ply? 'Lance '+moveNo(O.ply-1)+'<b>'+esc(O.ms[O.ply-1].san)+'</b>' : 'Use ▶ para avançar pela linha.'; sub += '<p style="margin-top:6px">'+esc(O.o.idea)+'</p>'; }
+  else if(O.state==='done'){ ic='best'; title='Linha completa! '+(O.errors?O.errors+' erro(s)':'Sem erros 🎉'); sub='Repita até fazer sem erros para dominar a abertura.'; }
+  else if(O.state==='wrong'){ ic='mistake'; title=esc(O.wrong)+' não é o lance da linha'; sub=(O.tries>=3?'O lance é <b>'+esc(next.san)+'</b> (seta verde).':O.tries>=2?'Dica: mova a peça destacada.':'Tente de novo.')+(O.alt?'<br><span class="muted">'+O.alt+'</span>':''); }
+  else if(yourTurn){ title='Sua vez ('+sideName(O.side)+')'; sub='Jogue o próximo lance de <b>'+esc(O.o.name)+'</b>.'; }
+  else { title='…'; sub='O adversário está jogando.'; }
+  $('trFb').innerHTML = fbHtml(ic, title, sub);
+  const B=$('trBtns');
+  if(O.mode==='learn') B.innerHTML='<button class="btn sm" id="opPrev">◀</button><button class="btn sm" id="opNext">▶</button><button class="btn sm primary" id="opW">Praticar de brancas</button><button class="btn sm primary" id="opB">Praticar de pretas</button>';
+  else B.innerHTML=(O.state==='done'?'<button class="btn sm primary" id="opAgain">↻ Praticar de novo</button>':'<button class="btn sm" id="opHint">💡 Dica</button><button class="btn sm" id="opShow">Mostrar lance</button>')+'<button class="btn sm" id="opBack">← Aberturas</button>';
+  B.innerHTML += '<button class="btn sm ai" id="trAiB">🤖 Explicar a abertura</button>';
+  const on=(id,f)=>{ if($(id)) $(id).onclick=f; };
+  on('opPrev',()=>{ O.ply=Math.max(0,O.ply-1); opRender(); });
+  on('opNext',()=>{ O.ply=Math.min(O.ms.length,O.ply+1); opRender(); });
+  on('opW',()=>opStart(O.o,'w')); on('opB',()=>opStart(O.o,'b'));
+  on('opAgain',()=>opStart(O.o,O.side)); on('opBack',()=>openingsHome());
+  on('opHint',()=>{ O.hint=1; O.tries=Math.max(O.tries,2); opRender(); });
+  on('opShow',()=>{ O.show=true; O.tries=3; opRender(); });
+  $('trAiB').onclick=()=>runAi('op'+O.o.id, 'Ideias da abertura', AI_SYS, 'Abertura: '+O.o.name+'\nLinha (SAN): '+lineText('rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1', O.ms.map(m=>m.uci), 40)+'\nResumo: '+O.o.idea+'\nO aluno está treinando de '+sideName(O.side)+'.\n\nExplique para o aluno, com os títulos ### Ideias principais, ### Plano depois da linha, ### Armadilhas e erros comuns, ### Como as pretas/brancas costumam fugir da linha. Seja concreto, mas só cite lances que você tem certeza que são corretos nessa abertura.', $('trAi'));
+  $('trInfo').innerHTML = '<div style="font-size:13px;line-height:1.8">'+lineHtml+'</div>';
+}
+function opMove(m){
+  const O=S.op, next=O.ms[O.ply];
+  if(O.kind==='rep') return repMove(m);
+  if(next && m.uci===next.uci){ O.ply++; O.state='ask'; O.tries=0; O.hint=0; O.show=false; O.badge={sq:m.to, cls:'book'}; opRender(); opAuto(); return; }
+  O.tries++; if(O.tries===1) O.errors++; O.state='wrong'; O.wrong=m.san; O.alt=''; O.badge=null; opRender();
+}
+
+/* treino do repertório (suas partidas) */
+function repStart(rep){
+  practiceLayout();
+  // árvore: posição → lances dos adversários (frequência)
+  const tree={}, key=f=>f.split(' ').slice(0,4).join(' ');
+  for(const g of rep.games){
+    const c=new Chess(); if(!c.load_pgn(g.pgn.replace(/\r/g,''),{sloppy:true})) continue;
+    const h=c.history({verbose:true}).slice(0,24), r=new Chess();
+    for(const m of h){ if(m.color!==rep.color){ const k=key(r.fen()); (tree[k]||(tree[k]={}))[m.san]=(tree[k][m.san]||0)+1; } r.move(m); }
+  }
+  const start='rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
+  S.op = {o:{id:'rep-'+rep.name, name:rep.name, idea:'Aberturas das suas partidas ('+rep.n+' jogos).', list:[]}, rep, tree, key, kind:'rep', mode:rep.color, side:rep.color, fens:[start], ms:[], ply:0, errors:0, good:0, tries:0, state:'ask'};
+  TR_RENDER=repRender; repRender(); repAuto();
+}
+function repAuto(){
+  const O=S.op; const fen=O.fens[O.ply];
+  if(fen.split(' ')[1]===O.side) return;
+  const opts=O.tree[O.key(fen)];
+  if(!opts || O.ply>=22){ O.state='done'; repRender(); return; }
+  const tot=Object.values(opts).reduce((a,b)=>a+b,0); let r=Math.random()*tot, san=Object.keys(opts)[0];
+  for(const [s,n] of Object.entries(opts)){ r-=n; if(r<=0){ san=s; break; } }
+  setTimeout(()=>{ if(S.op!==O) return; const c=new Chess(fen); const m=c.move(san); if(!m){ O.state='done'; repRender(); return; }
+    O.ms=O.ms.slice(0,O.ply); O.fens=O.fens.slice(0,O.ply+1); O.ms.push({san:m.san, from:m.from, to:m.to, uci:m.from+m.to+(m.promotion||''), freq:opts[san], tot}); O.fens.push(c.fen()); O.ply++; O.state='ask'; O.badge=null; repRender(); }, 420);
+}
+async function repMove(m){
+  const O=S.op, fen=O.fens[O.ply]; if(O.busy) return; O.busy=true;
+  O.state='checking'; O.wrong=m.san; repRender();
+  const eng=await getEngine(); const r=await eng.analyze(fen, 14, null, 'try');
+  const before={best:r.best, ev:r.l1?r.l1.ev:{cp:0}, pv:r.l1?r.l1.pv:[]};
+  const res=await evalAttempt(fen, m, before);
+  O.busy=false; if(S.op!==O) return;
+  if(res.loss<5){
+    O.ms=O.ms.slice(0,O.ply); O.fens=O.fens.slice(0,O.ply+1); O.ms.push({san:m.san, from:m.from, to:m.to, uci:m.uci}); O.fens.push(m.fen); O.ply++;
+    O.badge={sq:m.to, cls: m.uci===before.best?'best':res.cls}; O.good++; O.state='ask'; O.tries=0; O.hint=0; O.lastMsg=m.uci===before.best?'Lance do Stockfish!':'Bom lance.'; repRender(); repAuto();
+  } else {
+    O.tries++; if(O.tries===1) O.errors++; O.state='wrong'; O.badge=null; O.bestNow=before.best;
+    O.lastMsg=esc(m.san)+' é '+CLS[res.cls].pt.toLowerCase()+' ('+evText(res.ev)+'; o melhor dá '+evText(before.ev)+').'; repRender();
+  }
+}
+function repRender(){
+  const O=S.op; if(!O || !$('trBoard')) return;
+  const fen=O.fens[O.ply], last=O.ply?O.ms[O.ply-1]:null, yourTurn=O.state!=='done' && fen.split(' ')[1]===O.side && O.state!=='checking';
+  const arrows=[]; let hint=null;
+  if(O.state==='wrong' && O.bestNow){ if(O.tries>=2) arrows.push([O.bestNow.slice(0,2),O.bestNow.slice(2,4),'#81b64c',.85]); else hint=O.bestNow.slice(0,2); }
+  drawBoard($('trBoard'), {fen, flipped:O.side==='b', last:last?{from:last.from,to:last.to}:null, badge:O.badge, arrows, hint, interactive:yourTurn, onMove:opMove});
+  let ic='', title, sub;
+  if(O.state==='done'){ ic='best'; title='Fim da linha!'; sub='Seus adversários não jogaram mais nada a partir daqui. '+O.good+' lance(s) bons, '+O.errors+' erro(s).'; }
+  else if(O.state==='checking'){ title='Verificando '+esc(O.wrong)+'…'; sub='<span class="loader"></span>'; }
+  else if(O.state==='wrong'){ ic='mistake'; title='Dá para melhorar'; sub=O.lastMsg+'<br>'+(O.tries>=2?'Seta verde = lance do Stockfish.':'Dica: a peça destacada. Tente de novo.'); }
+  else if(yourTurn){ ic=O.badge?O.badge.cls:''; title='Sua vez ('+sideName(O.side)+')'; sub=(O.lastMsg?O.lastMsg+' ':'')+(last&&last.freq?'Seus adversários jogaram <b>'+esc(last.san)+'</b> em '+last.freq+' de '+last.tot+' partida(s).':''); }
+  else { title='…'; sub='Jogando o lance de um adversário real.'; }
+  $('trFb').innerHTML=fbHtml(ic,title,sub);
+  $('trBtns').innerHTML='<button class="btn sm primary" id="repAgain">↻ Recomeçar</button><button class="btn sm" id="opBack">← Aberturas</button><button class="btn sm ai" id="trAiB">🤖 Explicar posição</button>';
+  $('repAgain').onclick=()=>repStart(O.rep); $('opBack').onclick=()=>openingsHome();
+  $('trAiB').onclick=()=>runAi('rep'+fen, 'Explicação', AI_SYS, 'Treino de abertura ('+O.rep.name+', aluno de '+sideName(O.side)+').\nLances até agora: '+lineText('rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1', O.ms.slice(0,O.ply).map(x=>x.uci), 40)+'\nFEN: '+fen+'\nPeças: '+pieceList(fen)+'\n\nExplique em 4-6 frases o que está acontecendo nessa abertura e qual deve ser o plano do aluno.', $('trAi'));
+  $('trInfo').innerHTML='<div style="font-size:13px;line-height:1.8">'+(esc(lineText('rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1', O.ms.slice(0,O.ply).map(x=>x.uci), 40))||'<span class="muted">Comece!</span>')+'</div>';
+}
+
+/* ---------------- ♔ FINAIS ---------------- */
+const ENDGAMES = [
+  {id:'qmate', name:'Mate de dama', fen:'8/8/8/4k3/8/8/8/4K2Q w - - 0 1', goal:'mate', par:10, tip:'Use a dama para encurralar o rei inimigo (fique a um "pulo de cavalo" dele) e traga o seu rei para ajudar. Cuidado com o afogamento: sempre deixe uma casa livre para o rei inimigo.'},
+  {id:'rmate', name:'Mate de torre', fen:'8/8/8/4k3/8/8/8/R3K3 w - - 0 1', goal:'mate', par:16, tip:'Corte o rei com a torre, ponha os reis em oposição e dê xeque para empurrar o rei inimigo uma fileira por vez até a borda.'},
+  {id:'kp6', name:'Rei e peão (rei na 6ª)', fen:'4k3/8/4K3/4P3/8/8/8/8 w - - 0 1', goal:'promote', par:8, tip:'Com o seu rei na 6ª fileira na frente do peão, a vitória é garantida. Use a oposição: o rei abre caminho e o peão vem depois.'},
+  {id:'opp', name:'Rei e peão (oposição)', fen:'8/8/4k3/8/8/4K3/4P3/8 w - - 0 1', goal:'promote', par:14, tip:'Avance primeiro o REI, não o peão. Coloque o rei na frente do peão e use o lance de peão como "tempo" para ganhar a oposição.'},
+  {id:'lucena', name:'Lucena (torre e peão)', fen:'1K6/1P1k4/8/8/8/8/r7/5R2 w - - 0 1', goal:'promote', par:14, tip:'Afaste o rei inimigo com um xeque na coluna, leve a torre à 4ª fileira e "construa a ponte": a torre bloqueia os xeques laterais para o seu rei sair.'},
+  {id:'2b', name:'Mate com dois bispos (desafio)', fen:'8/8/8/4k3/8/8/8/2B1KB2 w - - 0 1', goal:'mate', par:25, tip:'Os bispos lado a lado formam uma barreira diagonal. Leve o rei inimigo para um canto com a ajuda do seu rei, sem permitir afogamento.'},
+  {id:'bn', name:'Bispo e cavalo (desafio máximo)', fen:'8/8/8/4k3/8/8/8/2B1KN2 w - - 0 1', goal:'mate', par:33, tip:'O mate só sai no canto da cor do seu bispo. Empurre o rei para a borda e use a manobra em "W" do cavalo para levá-lo ao canto certo.'},
+];
+function egStore(){ return store.get('tr:eg') || {}; }
+function endHome(){
+  TR_RENDER=null; const st=egStore();
+  $('trArea').innerHTML = '<div class="muted" style="margin-bottom:10px;font-size:13px">Você joga de brancas contra o Stockfish. Ele defende da melhor forma possível.</div><div class="opgrid">'+ENDGAMES.map(e=>{ const r=st[e.id];
+    return '<div class="card"><div class="pad"><div style="font-weight:800">'+esc(e.name)+'</div><div class="muted" style="font-size:12px;margin:2px 0 6px">Objetivo: '+(e.goal==='mate'?'dar mate':'promover e vencer')+' · meta: '+e.par+' lances</div><div style="font-size:13px;color:#cfcbc4;line-height:1.45">'+esc(e.tip)+'</div>'+
+    '<div class="rowbtns" style="padding:10px 0 0"><button class="btn sm primary" data-eg="'+e.id+'">▶ Jogar</button>'+(r?'<span class="accchip">✓ '+r.best+' lances</span>':'')+'</div></div></div>'; }).join('')+'</div>';
+  $('trArea').querySelectorAll('[data-eg]').forEach(b=>b.onclick=()=>egStart(ENDGAMES.find(x=>x.id===b.dataset.eg)));
+}
+function egStart(e){
+  practiceLayout();
+  S.eg = {e, hist:[e.fen], last:null, moves:0, state:'ask', msg:'', hintArrow:null, warn:''};
+  TR_RENDER=egRender; egRender();
+}
+function egRender(){
+  const E=S.eg; if(!E || !$('trBoard')) return;
+  const fen=E.hist[E.hist.length-1];
+  drawBoard($('trBoard'), {fen, flipped:false, last:E.last, arrows:E.hintArrow?[[E.hintArrow.slice(0,2),E.hintArrow.slice(2,4),'#4a90e2',.7]]:[], interactive:E.state==='ask' && fen.split(' ')[1]==='w', onMove:egMove});
+  let ic='', title, sub, color='';
+  if(E.state==='won'){ ic='brilliant'; title='Vitória! 🎉'; sub=E.msg; color='#26c2a3'; }
+  else if(E.state==='lost'){ ic='blunder'; title='Escapou…'; sub=E.msg+' Use ↶ Voltar lance ou Reiniciar.'; color='#fa412d'; }
+  else if(E.state==='thinking'){ title='Stockfish pensando…'; sub='<span class="loader"></span>'; }
+  else { title=esc(E.e.name)+' — sua vez'; sub=(E.warn?'<span style="color:#ffa459">'+E.warn+'</span><br>':'')+'Lances: <b>'+E.moves+'</b> (meta: '+E.e.par+')'; }
+  $('trFb').innerHTML=fbHtml(ic,title,sub,color);
+  $('trBtns').innerHTML='<button class="btn sm" id="egUndo">↶ Voltar lance</button><button class="btn sm" id="egHint">💡 Dica</button><button class="btn sm" id="egReset">↻ Reiniciar</button><button class="btn sm" id="egBack">← Finais</button><button class="btn sm ai" id="trAiB">🤖 Como vencer?</button>';
+  $('egUndo').onclick=()=>{ if(E.hist.length>=3 && E.state!=='thinking'){ E.hist.splice(-2); E.moves=Math.max(0,E.moves-1); E.state='ask'; E.warn=''; E.hintArrow=null; E.last=null; egRender(); } };
+  $('egHint').onclick=async()=>{ if(E.state!=='ask') return; const eng=await getEngine(); const r=await eng.analyze(fen, 16, null, 'try'); E.hintArrow=r.best; egRender(); };
+  $('egReset').onclick=()=>egStart(E.e); $('egBack').onclick=()=>endHome();
+  $('trAiB').onclick=()=>runAi('eg'+E.e.id, 'Técnica do final', AI_SYS, 'Final: '+E.e.name+'\nPosição inicial (FEN): '+E.e.fen+'\nPeças: '+pieceList(E.e.fen)+'\nPosição atual (FEN): '+fen+'\nDica base: '+E.e.tip+'\n\nExplique a técnica para vencer esse final passo a passo (5-8 frases ou uma lista curta), com os princípios que o aluno deve seguir. Não invente sequências longas de lances.', $('trAi'));
+  const st=egStore()[E.e.id];
+  $('trInfo').innerHTML='<div class="muted" style="font-size:13px;line-height:1.6">'+esc(E.e.tip)+(st?'<br><br>Seu recorde: <b>'+st.best+'</b> lances':'')+'</div>';
+}
+async function egMove(m){
+  const E=S.eg; E.hintArrow=null; E.warn='';
+  E.hist.push(m.fen); E.last={from:m.from,to:m.to}; E.moves++;
+  const c=new Chess(m.fen);
+  if(c.in_checkmate()) return egWin('Xeque-mate em '+E.moves+' lances!');
+  if(c.in_draw() || c.in_stalemate() || c.insufficient_material() || egRepeat(E)) return egLose(c.in_stalemate()?'Afogamento — empate!':'Empate.');
+  E.state='thinking'; egRender();
+  const eng=await getEngine(); const r=await eng.analyze(m.fen, 14, null, 'end');
+  if(S.eg!==E) return;
+  const ev = r.l1? r.l1.ev : {cp:0}, w=winOf(ev);
+  if(E.e.goal==='promote' && m.promo && w>=95) return egWin('Promoveu e a vitória está garantida ('+evText(ev)+') em '+E.moves+' lances!');
+  if(w<70) E.warn='Atenção: esse lance deixou escapar a vitória ('+evText(ev)+'). Experimente ↶ Voltar lance.';
+  if(!r.best) return egLose('Empate.');
+  await new Promise(res=>setTimeout(res,300));
+  const bm=playLine(m.fen,[r.best],1)[0]; E.hist.push(bm.fenAfter); E.last={from:bm.from,to:bm.to};
+  const c2=new Chess(bm.fenAfter);
+  if(c2.in_draw() || c2.insufficient_material() || egRepeat(E)) return egLose('As pretas conseguiram o empate.');
+  E.state='ask'; egRender();
+}
+function egRepeat(E){ const k=f=>f.split(' ').slice(0,4).join(' '); const cur=k(E.hist[E.hist.length-1]); return E.hist.filter(f=>k(f)===cur).length>=3; }
+function egWin(msg){ const E=S.eg; E.state='won'; E.msg=msg+(E.moves<=E.e.par?' Dentro da meta!':' Meta: '+E.e.par+' lances — tente fazer mais rápido.'); const st=egStore(); const p=st[E.e.id]; st[E.e.id]={best:p?Math.min(p.best,E.moves):E.moves}; store.set('tr:eg',st); egRender(); }
+function egLose(msg){ const E=S.eg; E.state='lost'; E.msg=msg; egRender(); }
+
+/* ---------------- 🤖 PLANO DO DIA ---------------- */
+function planHome(){
+  TR_RENDER=null;
+  const list=buildPuzzles(), st=puzStore();
+  const cat={}; for(const P of list) for(const c of P.cats){ if(c==='all') continue; const o=cat[c]||(cat[c]={n:0,s:0,f:0}); o.n++; const v=st[P.id]; if(v){ o.s+=v.s||0; o.f+=v.f||0; } }
+  const ost=opStore(), est=egStore(), mine=myOpenings();
+  const worstCat = Object.entries(cat).filter(([k,o])=>o.s+o.f>=2).sort((a,b)=>(b[1].f/(b[1].s+b[1].f))-(a[1].f/(a[1].s+a[1].f)))[0];
+  const worstOpen = mine.filter(o=>o.n>=2).sort((a,b)=>a.win/a.n-b.win/b.n)[0];
+  const nextEg = ENDGAMES.find(e=>!est[e.id]);
+  const sug=[];
+  if(list.length) sug.push('🧩 <b>10 exercícios</b> de '+(worstCat? '<b>'+PCAT[worstCat[0]]+'</b> (onde você mais erra: '+Math.round(worstCat[1].f/(worstCat[1].s+worstCat[1].f)*100)+'% de erro)' : '<b>'+(cat.tatica?'Táticas':'Todos')+'</b>'));
+  if(worstOpen) sug.push('📖 Praticar <b>'+esc(worstOpen.name)+'</b> de '+sideName(worstOpen.color).toLowerCase()+' — só '+pct(worstOpen.win,worstOpen.n)+'% de vitórias em '+worstOpen.n+' jogos');
+  else sug.push('📖 Aprender uma abertura da biblioteca para as '+(['brancas','pretas'][Math.random()<.5?0:1]));
+  if(nextEg) sug.push('♔ Final: <b>'+esc(nextEg.name)+'</b>');
+  else sug.push('♔ Repetir um final tentando bater a meta de lances');
+  sug.push('🔍 Revisar sua última partida com a IA (aba Revisão → Treinador IA)');
+  $('trArea').innerHTML = '<div class="grid2"><div class="card"><h3>Sugestão automática para hoje</h3><div class="pad"><ol style="margin:0;padding-left:20px;line-height:1.9">'+sug.map(s=>'<li>'+s+'</li>').join('')+'</ol>'+
+    '<div class="rowbtns" style="padding:12px 0 0"><button class="btn sm primary" id="plGoPuz">Começar exercícios</button><button class="btn sm" id="plGoOp">Aberturas</button><button class="btn sm" id="plGoEg">Finais</button></div></div></div>'+
+    '<div class="card"><h3>Seu treino em números</h3><div class="pad" style="font-size:13px;line-height:1.8">'+
+      Object.entries(cat).map(([k,o])=>PCAT[k]+': '+o.n+' exercícios'+(o.s+o.f?' · '+Math.round(o.s/(o.s+o.f)*100)+'% de acerto':'')).join('<br>')+
+      '<br>Aberturas treinadas: '+Object.keys(ost).length+' · dominadas: '+Object.values(ost).filter(v=>v.best===0).length+
+      '<br>Finais vencidos: '+Object.keys(est).length+' de '+ENDGAMES.length+'</div></div></div>'+
+    '<div class="rowbtns" style="padding:14px 0"><button class="btn ai" id="plAi">🤖 Montar meu treino de hoje com IA</button></div><div id="trAi"></div>';
+  $('plGoPuz').onclick=()=>{ S.trMode='puz'; if(worstCat){ S.pz=S.pz||{}; S.pz.filter=worstCat[0]; } openTrain(); };
+  $('plGoOp').onclick=()=>{ S.trMode='open'; openTrain(); };
+  $('plGoEg').onclick=()=>{ S.trMode='end'; openTrain(); };
+  $('plAi').onclick=()=>{
+    let facts='Aluno: '+(S.user||'?')+'\nEXERCÍCIOS (dos erros das partidas dele):\n'+Object.entries(cat).map(([k,o])=>'- '+PCAT[k]+': '+o.n+' exercícios, '+o.s+' acertos, '+o.f+' erros').join('\n');
+    facts+='\nABERTURAS que ele joga (das partidas): '+(mine.map(o=>o.name+' de '+sideName(o.color)+': '+o.n+' jogos, '+pct(o.win,o.n)+'% vitórias').join('; ')||'sem dados');
+    facts+='\nAberturas da biblioteca já treinadas: '+(Object.entries(ost).map(([k,v])=>k+' (melhor: '+v.best+' erros)').join(', ')||'nenhuma');
+    facts+='\nFinais vencidos: '+(Object.keys(est).join(', ')||'nenhum')+' de '+ENDGAMES.map(e=>e.id).join(', ');
+    try{ const d=statsData(); if(d.A.n){ facts+='\nPrecisão por fase: '+['open','mid','end'].map(k=>PHASE_PT[k]+' '+(d.A.phase[k].n?(d.A.phase[k].s/d.A.phase[k].n).toFixed(0):'?')).join(', ')+'\nTipos de erro: '+Object.entries(d.A.tags).map(([t,n])=>TAG_PT[t]+' '+n).join(', '); } }catch(e){}
+    facts+='\n\nO app tem estes modos de treino: Exercícios (filtros: Táticas, Mates, Puna o erro, Abertura, Meio-jogo, Final, Para revisar), Aberturas (biblioteca: '+OPENINGS.map(o=>o.name).join(', ')+'; e treino com as aberturas das partidas dele), Finais ('+ENDGAMES.map(e=>e.name).join(', ')+') e Revisão de partidas.';
+    runAi('planday', 'Seu treino de hoje', AI_SYS, facts+'\n\nMonte um treino de 30-45 minutos para HOJE usando os modos do app, com os títulos ### Foco de hoje, ### Treino (passo a passo, com tempo e qual modo/filtro usar), ### Dica do dia. Baseie-se nos números.', $('trAi'));
+  };
 }
 
 /* =====================================================================
